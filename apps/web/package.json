@@ -14,8 +14,8 @@
   "dependencies": {
     "@iconify-json/lucide": "^1.2.64",
     "@iconify-json/simple-icons": "^1.2.78",
-    "@nuxt/ui": "^4.1.0",
-    "nuxt": "^4.1.0",
+    "@nuxt/ui": "^4.10.0",
+    "nuxt": "^4.5.2",
     "tailwindcss": "^4.1.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"

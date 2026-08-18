@@ -2,6 +2,7 @@
   "name": "mplus-lfg",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "pnpm --filter @mplus-lfg/web dev",
     "dev:web": "pnpm --filter @mplus-lfg/web dev",
