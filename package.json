@@ -9,10 +9,13 @@
     "dev:bot": "pnpm --filter @mplus-lfg/bot dev",
     "build": "pnpm --filter @mplus-lfg/web build",
     "build:web": "pnpm --filter @mplus-lfg/web build",
+    "preview:web": "pnpm --filter @mplus-lfg/web preview",
+    "deploy:web": "pnpm --filter @mplus-lfg/web deploy",
     "deploy:bot": "pnpm --filter @mplus-lfg/bot deploy",
     "test": "pnpm --filter @mplus-lfg/bot test",
     "typecheck": "pnpm -r typecheck",
     "register": "pnpm --filter @mplus-lfg/bot register",
-    "cf-typegen": "pnpm --filter @mplus-lfg/bot cf-typegen"
+    "cf-typegen": "pnpm --filter @mplus-lfg/bot cf-typegen",
+    "cf-typegen:web": "pnpm --filter @mplus-lfg/web cf-typegen"
   }
 }
