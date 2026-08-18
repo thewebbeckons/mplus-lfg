@@ -1,19 +1,17 @@
 {
-	"name": "mplus-lfg",
-	"version": "0.0.0",
-	"private": true,
-	"scripts": {
-		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
-		"test": "vitest",
-		"cf-typegen": "wrangler types"
-	},
-	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.12.4",
-		"@types/node": "^26.2.0",
-		"typescript": "^5.5.2",
-		"vitest": "~3.2.0",
-		"wrangler": "^4.123.0"
-	}
+  "name": "mplus-lfg",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @mplus-lfg/web dev",
+    "dev:web": "pnpm --filter @mplus-lfg/web dev",
+    "dev:bot": "pnpm --filter @mplus-lfg/bot dev",
+    "build": "pnpm --filter @mplus-lfg/web build",
+    "build:web": "pnpm --filter @mplus-lfg/web build",
+    "deploy:bot": "pnpm --filter @mplus-lfg/bot deploy",
+    "test": "pnpm --filter @mplus-lfg/bot test",
+    "typecheck": "pnpm -r typecheck",
+    "register": "pnpm --filter @mplus-lfg/bot register",
+    "cf-typegen": "pnpm --filter @mplus-lfg/bot cf-typegen"
+  }
 }

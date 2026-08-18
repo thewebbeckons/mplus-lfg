@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --color-discord-50: #f0f2ff;
+  --color-discord-100: #e2e5ff;
+  --color-discord-200: #c9ceff;
+  --color-discord-300: #a8afff;
+  --color-discord-400: #7f89fb;
+  --color-discord-500: #5865f2;
+  --color-discord-600: #4752c4;
+  --color-discord-700: #3c45a5;
+  --color-discord-800: #343b85;
+  --color-discord-900: #30366a;
+  --color-discord-950: #1d203e;
+}
+
+html {
+  scroll-behavior: smooth;
+}

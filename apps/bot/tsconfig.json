@@ -15,6 +15,9 @@
 		"moduleResolution": "Bundler",
 		/* Enable importing .json files */
 		"resolveJsonModule": true,
+		/* `scripts/` runs under Node's TypeScript type stripping, which requires
+		   explicit `.ts` extensions in import specifiers. */
+		"allowImportingTsExtensions": true,
 
 		/* Allow JavaScript files to be a part of your program. Use the `checkJS` option to get errors from these files. */
 		"allowJs": true,
@@ -42,5 +45,5 @@
 		]
 	},
 	"exclude": ["test"],
-	"include": ["worker-configuration.d.ts", "src/**/*.ts"]
+	"include": ["worker-configuration.d.ts", "src/**/*.ts", "scripts/**/*.ts"]
 }
