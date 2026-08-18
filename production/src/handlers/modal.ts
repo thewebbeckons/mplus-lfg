@@ -1,5 +1,5 @@
 import { type APIInteractionResponse, type APIModalSubmitInteraction, InteractionResponseType } from 'discord-api-types/v10';
-import { DEFAULT_ROLE, MODAL_FIELD } from '../constants';
+import { MODAL_FIELD } from '../constants';
 import { createGroup, setMessageId } from '../db';
 import { fetchOriginalInteractionResponse } from '../discord';
 import { buildGroupMessage } from '../embeds';
@@ -51,10 +51,9 @@ export async function handleModalSubmit(
 	const activity = (values.get(MODAL_FIELD.activity) ?? '').trim();
 	if (!activity) return ephemeral('An activity is required — tell people what you are running.');
 
-	const submittedRole = values.get(MODAL_FIELD.role);
-	const role = parseRole(submittedRole ?? DEFAULT_ROLE);
+	const role = parseRole(values.get(MODAL_FIELD.role) ?? '');
 	if (!role) {
-		return ephemeral(`Could not read the role \`${submittedRole ?? ''}\`. Select **Tank**, **Healer**, or **DPS**.`);
+		return ephemeral(`Could not read the role \`${values.get(MODAL_FIELD.role) ?? ''}\`. Enter **Tank**, **Healer**, or **DPS**.`);
 	}
 
 	const plan = parseComposition(values.get(MODAL_FIELD.comp) ?? '', role);

@@ -7,7 +7,7 @@ import {
 	InteractionResponseType,
 	TextInputStyle,
 } from 'discord-api-types/v10';
-import { COMMAND_NAME, DEFAULT_ROLE, MODAL_CREATE_ID, MODAL_FIELD } from '../constants';
+import { COMMAND_NAME, MODAL_CREATE_ID, MODAL_FIELD } from '../constants';
 import { ephemeral } from '../interactions';
 
 /**
@@ -82,16 +82,13 @@ const ROLE_INPUT: APILabelComponent = {
 		type: ComponentType.StringSelect,
 		custom_id: MODAL_FIELD.role,
 		placeholder: 'Choose your role',
-		// Discord currently renders the default option but can still treat an
-		// untouched required select as unanswered. Let that case submit; the modal
-		// handler applies the same displayed default when `values` is empty.
-		required: false,
-		min_values: 0,
+		required: true,
+		min_values: 1,
 		max_values: 1,
 		options: [
 			{ label: 'Tank', value: 'TANK', emoji: { name: '🛡️' } },
 			{ label: 'Healer', value: 'HEALER', emoji: { name: '💚' } },
-			{ label: 'DPS', value: 'DPS', emoji: { name: '⚔️' }, default: DEFAULT_ROLE === 'DPS' },
+			{ label: 'DPS', value: 'DPS', emoji: { name: '⚔️' }, default: true },
 		],
 	},
 };

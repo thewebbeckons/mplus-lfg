@@ -20,9 +20,6 @@ export const MODAL_FIELD = {
 
 export const ROLES = ['TANK', 'HEALER', 'DPS'] as const;
 
-/** Role shown as selected when the run creation modal first opens. */
-export const DEFAULT_ROLE: Role = 'DPS';
-
 interface RoleMeta {
 	label: string;
 	emoji: string;

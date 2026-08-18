@@ -94,8 +94,8 @@ describe('/lfg', () => {
 			component: {
 				type: 3,
 				custom_id: 'role',
-				required: false,
-				min_values: 0,
+				required: true,
+				min_values: 1,
 				max_values: 1,
 			},
 		});
@@ -138,16 +138,6 @@ describe('modal submission', () => {
 
 		const stored = await env.DB.prepare('SELECT * FROM mplus_groups').first<GroupRow>();
 		expect(stored?.message_id).toBeNull();
-	});
-
-	it('uses DPS when the displayed default is submitted without a changed select value', async () => {
-		fetchMock.get('https://discord.com').intercept({ method: 'GET', path: ORIGINAL_MESSAGE_PATH }).reply(200, { id: 'message-1' });
-
-		const { body } = await post(modalInteraction('creator', { ...fields, role: '' }));
-
-		expect(body.type).toBe(InteractionResponseType.ChannelMessageWithSource);
-		const state = await loadState(env.DB, (await env.DB.prepare('SELECT id FROM mplus_groups').first<{ id: string }>())!.id);
-		expect(state?.signups).toMatchObject([{ user_id: 'creator', role: 'DPS' }]);
 	});
 
 	it('posts a partly pre-filled run when the creator already has people', async () => {

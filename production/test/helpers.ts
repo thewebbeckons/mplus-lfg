@@ -133,7 +133,7 @@ export function modalInteraction(userId: string, fields: Record<string, string>)
 				type: 18,
 				component:
 					customId === 'role'
-						? { type: 3, custom_id: customId, values: value ? [value] : [] }
+						? { type: 3, custom_id: customId, values: [value] }
 						: { type: 4, custom_id: customId, value },
 			})),
 		},
