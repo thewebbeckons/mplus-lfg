@@ -14,51 +14,51 @@ const githubUrl = config.public.githubUrl || undefined
 const features = [
   {
     icon: 'i-lucide-zap',
-    title: '100% Serverless & Instant',
-    description: 'Runs on Cloudflare Workers via HTTP Interactions. Zero idle hosting costs, no websocket gateway drops, and sub-100ms response times.'
+    title: 'Fast and out of the way',
+    description: 'Runs right inside Discord, so your group can get organized without opening another site or waiting around.'
   },
   {
     icon: 'i-lucide-calculator',
-    title: 'Smart Premade Math',
-    description: 'Just type "LF 2 DPS", "1/1/3", or "LF1M tank". The bot calculates open vs reserved slots automatically and locks full roles immediately.'
+    title: 'Flexible group setup',
+    description: 'Type "LF 2 DPS", "1/1/3", or "LF1M tank" and the bot works out which spots are covered and which are still open.'
   },
   {
     icon: 'i-lucide-shield-check',
-    title: 'Atomic Concurrency Guard',
-    description: 'Backed by Cloudflare D1 batch transactions. If two players tap the last healer slot at the exact same millisecond, double-booking is impossible.'
+    title: 'No double-booking',
+    description: 'The moment someone claims the last open spot, it is taken. Everyone sees an accurate roster, even when several people click at once.'
   },
   {
     icon: 'i-lucide-clock',
-    title: 'Timezone-Aware Start Times',
-    description: 'Accepts relative offsets ("in 30 mins", "1h30m") and absolute times ("8:00 PM EST"), rendering native Discord timestamps for each user\'s timezone.'
+    title: 'Times everyone understands',
+    description: 'Say "in 30 mins" or "8:00 PM EST" and Discord shows the start time in each player\'s local timezone.'
   },
   {
     icon: 'i-lucide-sparkles',
-    title: 'Automatic Channel Sweeper',
-    description: 'A 10-minute scheduled cron sweeps expired runs, keeping your Discord channels clean and preventing stale button errors.'
+    title: 'Keeps channels tidy',
+    description: 'Finished and expired runs are cleared out automatically, so your channels stay useful and old buttons do not linger.'
   },
   {
     icon: 'i-lucide-users',
-    title: 'Silent Roster Mentions',
-    description: 'Sign-ups display real user tags in the embed so players know who joined without spamming mass notifications across your server.'
+    title: 'Clear, quiet rosters',
+    description: 'See exactly who joined each role without pinging the whole server.'
   }
 ]
 
 const steps = [
   {
     number: '01',
-    title: 'Open with /lfg',
-    description: 'Type /lfg in any Discord channel. A clean pop-up modal lets you set the dungeon, start time, your role, premade composition, and notes.'
+    title: 'Start a group',
+    description: 'Type /lfg in any Discord channel. Choose the dungeon, start time, your role, the spots you already have, and any notes.'
   },
   {
     number: '02',
-    title: 'Guild Members Claim Roles',
-    description: 'The bot posts an interactive message embed. Players click Tank, Healer, or DPS to join immediately in one click.'
+    title: 'Players pick a spot',
+    description: 'The bot posts the run with buttons for Tank, Healer, and DPS. Players click the role they want to join.'
   },
   {
     number: '03',
-    title: 'In-Place Live Updates',
-    description: 'Every interaction updates the message in place. The roster automatically locks when full and safely cleans up when the key starts.'
+    title: 'Everyone stays up to date',
+    description: 'The roster updates as people join, closes when the group is full, and cleans itself up when the run is over.'
   }
 ]
 
@@ -88,7 +88,7 @@ const syntaxExamples = [
         <nav class="hidden md:flex items-center gap-6 text-sm text-(--ui-text-muted) font-medium">
           <NuxtLink to="/#features" class="hover:text-(--ui-text-highlighted) transition-colors">Features</NuxtLink>
           <NuxtLink to="/#how-it-works" class="hover:text-(--ui-text-highlighted) transition-colors">How It Works</NuxtLink>
-          <NuxtLink to="/#syntax" class="hover:text-(--ui-text-highlighted) transition-colors">Composition Syntax</NuxtLink>
+          <NuxtLink to="/#syntax" class="hover:text-(--ui-text-highlighted) transition-colors">Group Examples</NuxtLink>
           <NuxtLink v-if="githubUrl" :to="githubUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors">GitHub</NuxtLink>
         </nav>
 
@@ -127,7 +127,7 @@ const syntaxExamples = [
           <!-- Tagline Badge -->
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-[#5865F2]/10 text-[#5865F2] border border-[#5865F2]/20 mb-6">
             <UIcon name="i-lucide-shield" class="w-3.5 h-3.5" />
-            <span>Serverless Mythic+ Discord Bot</span>
+            <span>Mythic+ Group Finder for Discord</span>
           </div>
 
           <!-- Main Hero Headline -->
@@ -137,7 +137,7 @@ const syntaxExamples = [
 
           <!-- Hero Subtitle -->
           <p class="mt-6 text-lg sm:text-xl text-(--ui-text-muted) max-w-2xl mx-auto leading-relaxed">
-            Create runs with <code class="px-1.5 py-0.5 rounded bg-(--ui-bg-muted) text-(--ui-text-highlighted) font-mono text-base">/lfg</code>, auto-manage premades, and prevent double-booking with atomic transactions on Cloudflare Workers.
+            Create a run with <code class="px-1.5 py-0.5 rounded bg-(--ui-bg-muted) text-(--ui-text-highlighted) font-mono text-base">/lfg</code>, let mplus-lfg track open roles and timing, and fill your group with less back-and-forth.
           </p>
 
           <!-- CTA Buttons -->
@@ -188,7 +188,7 @@ const syntaxExamples = [
               How it works
             </h2>
             <p class="mt-3 text-(--ui-text-muted)">
-              No separate web portals or third-party sign-ins. Everything happens inside your Discord server.
+              No separate website or account needed. Everything happens inside your Discord server.
             </p>
           </div>
 
@@ -219,10 +219,10 @@ const syntaxExamples = [
         <div class="max-w-6xl mx-auto px-4 sm:px-6">
           <div class="text-center max-w-2xl mx-auto mb-14">
             <h2 class="text-3xl font-bold tracking-tight text-(--ui-text-highlighted)">
-              Built for speed and simplicity
+              Spend less time organizing
             </h2>
             <p class="mt-3 text-(--ui-text-muted)">
-              Engineered from the ground up for seamless Discord interactions and zero maintenance overhead.
+              Fill a group, keep everyone on the same page, and keep your server tidy.
             </p>
           </div>
 
@@ -251,10 +251,10 @@ const syntaxExamples = [
         <div class="max-w-4xl mx-auto px-4 sm:px-6">
           <div class="text-center max-w-2xl mx-auto mb-12">
             <h2 class="text-3xl font-bold tracking-tight text-(--ui-text-highlighted)">
-              Natural Composition Syntax
+              Tell it what your group needs
             </h2>
             <p class="mt-3 text-(--ui-text-muted)">
-              Specify full party comps or only what you need. Premades are calculated automatically without manual arithmetic.
+              Use familiar shorthand to say which roles you already have and which ones you still need.
             </p>
           </div>
 
@@ -276,7 +276,7 @@ const syntaxExamples = [
           </div>
 
           <div class="mt-6 text-center text-xs text-(--ui-text-muted)">
-            Supports <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">need</code>, <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">looking for</code>, <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">want</code>, and leading <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">+</code> markers.
+            You can say <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">need</code>, <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">looking for</code>, or <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">want</code>, or use a leading <code class="px-1 py-0.5 rounded bg-(--ui-bg-muted) font-mono">+</code> to describe open spots.
           </div>
         </div>
       </section>
@@ -290,7 +290,7 @@ const syntaxExamples = [
                 Ready to organize your Mythic+ keys?
               </h2>
               <p class="mt-4 text-white/80 text-base sm:text-lg leading-relaxed">
-                Add mplus-lfg to your Discord server in seconds. Free, open source, and serverless.
+                Add mplus-lfg to your Discord server in seconds. Free and open source, with everything happening where your group already plays.
               </p>
               <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
                 <UButton

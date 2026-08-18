@@ -28,7 +28,7 @@ export default defineNuxtConfig({
     head: {
       title: 'mplus-lfg — World of Warcraft Mythic+ Grouping Bot for Discord',
       meta: [
-        { name: 'description', content: 'Serverless Discord bot for organizing WoW Mythic+ keystones. Instant HTTP interactions, smart premades, and concurrency-guarded transactions on Cloudflare Workers.' },
+        { name: 'description', content: 'Discord bot for organizing WoW Mythic+ groups. Create runs, fill roles, and keep your roster up to date right inside Discord.' },
         { name: 'theme-color', content: '#5865F2' }
       ],
       script: [

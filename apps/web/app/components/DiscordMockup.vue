@@ -106,8 +106,8 @@ function reset() {
 
       <!-- Footer -->
       <div class="text-[11px] text-[#80848e] pt-1 flex items-center justify-between border-t border-[#35373c]/50">
-        <span>Run c9b3e1a0</span>
-        <span class="text-[10px]">Try clicking the buttons below!</span>
+        <span>Roster updates as players join</span>
+        <span class="text-[10px]">Click a role to try it</span>
       </div>
     </div>
 
