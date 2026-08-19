@@ -51,6 +51,17 @@ describe('parseStartTime', () => {
 		expect(parseStartTime('tomorrow 8pm ACDT', { nowMs: Date.UTC(2026, 0, 16, 18, 30) }).ts).toBe(seconds(Date.UTC(2026, 0, 18, 9, 30)));
 	});
 
+	it('shifts a time inside a spring-forward gap past the gap', () => {
+		// US Eastern skips 02:00-03:00 on 2026-03-08, so "2:30am" is on no clock that
+		// day. It shifts forward by the length of the gap rather than landing at
+		// 1:30am, an hour *before* what was asked for.
+		const earlyThatMorning = Date.UTC(2026, 2, 8, 6, 0); // 1am EST on Mar 8.
+		expect(parseStartTime('2:30am ET', { nowMs: earlyThatMorning }).ts).toBe(seconds(Date.UTC(2026, 2, 8, 7, 30)));
+		// A time either side of the gap is untouched.
+		expect(parseStartTime('1:30am ET', { nowMs: Date.UTC(2026, 2, 8, 5, 0) }).ts).toBe(seconds(Date.UTC(2026, 2, 8, 6, 30)));
+		expect(parseStartTime('3:30am ET', { nowMs: earlyThatMorning }).ts).toBe(seconds(Date.UTC(2026, 2, 8, 7, 30)));
+	});
+
 	it('rolls over a clock-change day by calendar days, not by 24 hours', () => {
 		// US Eastern falls back at 02:00 on 2026-11-01, making that day 25 hours long.
 		const dayBefore = Date.UTC(2026, 9, 31, 22, 0); // 6pm EDT on Oct 31.

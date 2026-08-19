@@ -270,11 +270,16 @@ function instantInZone(timeZone: string, year: number, month: number, day: numbe
 	const wall = Date.UTC(year, month - 1, day, hour, minute);
 	// The offset depends on the instant and the instant depends on the offset, so
 	// guess using the offset in force at the wall-clock reading and correct once.
-	// That settles every case except a time inside a spring-forward gap, which
-	// never happens — those land on the hour after the gap, which is the closest
-	// real instant to what was asked for.
 	const guess = wall - zoneOffsetMinutes(timeZone, wall) * 60_000;
-	return wall - zoneOffsetMinutes(timeZone, guess) * 60_000;
+	const guessOffset = zoneOffsetMinutes(timeZone, guess);
+	const corrected = wall - guessOffset * 60_000;
+	// The correction settles every reading a clock in `timeZone` actually shows. A
+	// time inside a spring-forward gap shows on no clock, and correcting it lands
+	// *before* the gap — "2:30am" on a US spring-forward day would come back as
+	// 1:30am, earlier than what was asked for. Keep `guess` in that case, which
+	// shifts the request forward by the length of the gap: 2:30am becomes 3:30am.
+	if (zoneOffsetMinutes(timeZone, corrected) !== guessOffset) return guess;
+	return corrected;
 }
 
 /** Render for an embed: localised Discord markup when resolved, plain text otherwise. */
