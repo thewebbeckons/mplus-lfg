@@ -3,12 +3,24 @@ import {
 	type APIApplicationCommandInteraction,
 	type APIInteractionResponse,
 	ApplicationCommandType,
+	ChannelType,
 	ComponentType,
 	InteractionResponseType,
+	SelectMenuDefaultValueType,
 	TextInputStyle,
 } from 'discord-api-types/v10';
-import { COMMAND_NAME, DEFAULT_ROLE, MODAL_CREATE_ID, MODAL_FIELD } from '../constants';
-import { ephemeral } from '../interactions';
+import {
+	COMMAND_NAME,
+	DEFAULT_ROLE,
+	MODAL_CREATE_ID,
+	MODAL_FIELD,
+	MODAL_SETUP_ID,
+	SETUP_CHANNEL_FIELD,
+} from '../constants';
+import { getGuildConfig } from '../db';
+import type { Bindings } from '../env';
+import { canManageGuild, ephemeral } from '../interactions';
+import { requireLfgChannel } from '../lfgAccess';
 
 /**
  * `/lfg` opens a modal rather than taking slash-command options. The role is a
@@ -96,14 +108,64 @@ const ROLE_INPUT: APILabelComponent = {
 	},
 };
 
-export function handleCommand(interaction: APIApplicationCommandInteraction): APIInteractionResponse {
-	if (interaction.data.type !== ApplicationCommandType.ChatInput || interaction.data.name !== COMMAND_NAME) {
+export async function handleCommand(
+	interaction: APIApplicationCommandInteraction,
+	env: Bindings,
+): Promise<APIInteractionResponse> {
+	if (interaction.data.type !== ApplicationCommandType.ChatInput) {
 		return ephemeral('Unknown command.');
 	}
-	if (!interaction.guild_id) {
-		return ephemeral('Mythic+ runs have to be posted in a server channel, not in DMs.');
+
+	if (interaction.data.name === COMMAND_NAME.setup || interaction.data.name === COMMAND_NAME.settings) {
+		return handleConfigurationCommand(interaction, env);
+	}
+	if (interaction.data.name !== COMMAND_NAME.lfg) return ephemeral('Unknown command.');
+
+	const access = await requireLfgChannel(interaction, env.DB);
+	if (!access.allowed) return access.response;
+
+	return createGroupModal();
+}
+
+async function handleConfigurationCommand(
+	interaction: APIApplicationCommandInteraction,
+	env: Bindings,
+): Promise<APIInteractionResponse> {
+	if (!interaction.guild_id) return ephemeral('LFG setup is only available inside a server.');
+	if (!canManageGuild(interaction)) {
+		return ephemeral('You need **Manage Server** or **Administrator** permission to configure LFG.');
 	}
 
+	const config = await getGuildConfig(env.DB, interaction.guild_id);
+	const channelSelect: APILabelComponent = {
+		type: ComponentType.Label,
+		label: 'Dedicated LFG channel',
+		description: 'LFG commands and group posts will stay in this text channel.',
+		component: {
+			type: ComponentType.ChannelSelect,
+			custom_id: SETUP_CHANNEL_FIELD,
+			channel_types: [ChannelType.GuildText],
+			placeholder: 'Choose an LFG channel',
+			required: true,
+			min_values: 1,
+			max_values: 1,
+			...(config
+				? { default_values: [{ id: config.channel_id, type: SelectMenuDefaultValueType.Channel }] }
+				: {}),
+		},
+	};
+
+	return {
+		type: InteractionResponseType.Modal,
+		data: {
+			custom_id: MODAL_SETUP_ID,
+			title: config ? 'LFG settings' : 'Set up LFG',
+			components: [channelSelect],
+		},
+	};
+}
+
+function createGroupModal(): APIInteractionResponse {
 	return {
 		type: InteractionResponseType.Modal,
 		data: {

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cancelGroup, expireStaleGroups, joinGroup, leaveGroup, loadState } from '../src/db';
+import { cancelGroup, expireStaleGroups, getGuildConfig, joinGroup, leaveGroup, loadState, setGuildConfig } from '../src/db';
 import { applySchema, seedGroup, user } from './helpers';
 
 const NOW = 1_800_000_000;
@@ -12,6 +12,18 @@ beforeEach(async () => {
 function rosterOf(signups: Array<{ user_id: string; role: string }>): Record<string, string> {
 	return Object.fromEntries(signups.map((signup) => [signup.user_id, signup.role]));
 }
+
+describe('guild configuration', () => {
+	it('stores one channel per guild and replaces it on update', async () => {
+		expect(await getGuildConfig(env.DB, 'guild')).toBeNull();
+
+		await setGuildConfig(env.DB, 'guild', 'channel-1');
+		await setGuildConfig(env.DB, 'guild', 'channel-2');
+
+		expect(await getGuildConfig(env.DB, 'guild')).toEqual({ guild_id: 'guild', channel_id: 'channel-2' });
+		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_guild_config').first<{ n: number }>()).toEqual({ n: 1 });
+	});
+});
 
 describe('createGroup', () => {
 	it('opens the run with the creator already slotted in', async () => {

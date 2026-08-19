@@ -5,7 +5,7 @@
  * Discord secrets (which never appear in `wrangler.jsonc`) are type-checked too.
  */
 export interface Bindings {
-	/** D1 database holding `mplus_groups` / `mplus_signups`. */
+	/** D1 database holding guild configuration, groups, and signups. */
 	DB: D1Database;
 	/** Ed25519 public key from the Discord developer portal, hex encoded. */
 	DISCORD_PUBLIC_KEY: string;

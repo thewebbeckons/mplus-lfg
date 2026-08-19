@@ -2,13 +2,20 @@ import type { Composition, GroupStatus, Role } from './types';
 
 export const DISCORD_API_BASE = 'https://discord.com/api/v10';
 
-/** Slash command the bot listens for. */
-export const COMMAND_NAME = 'lfg';
+/** Slash commands the bot listens for. */
+export const COMMAND_NAME = {
+	lfg: 'lfg',
+	setup: 'setup',
+	settings: 'settings',
+} as const;
 
 /** Namespace for every `custom_id` this bot owns. */
 export const ID_PREFIX = 'mplus';
 
 export const MODAL_CREATE_ID = `${ID_PREFIX}:create`;
+export const MODAL_SETUP_ID = `${ID_PREFIX}:setup`;
+
+export const SETUP_CHANNEL_FIELD = 'lfg_channel';
 
 export const MODAL_FIELD = {
 	activity: 'activity',

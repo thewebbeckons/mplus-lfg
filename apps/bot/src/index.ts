@@ -22,7 +22,7 @@ async function route(interaction: APIInteraction, env: Bindings, ctx: ExecutionC
 		case InteractionType.Ping:
 			return { type: InteractionResponseType.Pong };
 		case InteractionType.ApplicationCommand:
-			return handleCommand(interaction);
+			return handleCommand(interaction, env);
 		case InteractionType.ModalSubmit:
 			return handleModalSubmit(interaction, env, ctx);
 		case InteractionType.MessageComponent:

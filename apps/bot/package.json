@@ -12,7 +12,9 @@
 		"cf-typegen": "wrangler types",
 		"register": "node scripts/register-commands.ts",
 		"db:init": "wrangler d1 execute mplus-lfg --local --file=./schema.sql",
-		"db:init:remote": "wrangler d1 execute mplus-lfg --remote --file=./schema.sql"
+		"db:init:remote": "wrangler d1 execute mplus-lfg --remote --file=./schema.sql",
+		"db:migrate": "wrangler d1 migrations apply mplus-lfg --local",
+		"db:migrate:remote": "wrangler d1 migrations apply mplus-lfg --remote"
 	},
 	"dependencies": {
 		"discord-api-types": "^0.38.53"

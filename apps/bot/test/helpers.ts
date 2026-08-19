@@ -1,9 +1,10 @@
-import { InteractionType } from 'discord-api-types/v10';
-import { createGroup } from '../src/db';
+import { ChannelType, InteractionType } from 'discord-api-types/v10';
+import { createGroup, setGuildConfig } from '../src/db';
 import type { Composition, GroupState, PartyPlan, Role } from '../src/types';
 
 export const GUILD_ID = '111111111111111111';
 export const CHANNEL_ID = '222222222222222222';
+export const OTHER_CHANNEL_ID = '333333333333333333';
 
 /**
  * Applies schema.sql to a test database. `D1Database.exec()` requires one
@@ -53,6 +54,10 @@ export function seedGroup(db: D1Database, options: SeedOptions = {}): Promise<Gr
 	});
 }
 
+export function configureGuild(db: D1Database, channelId = CHANNEL_ID): Promise<void> {
+	return setGuildConfig(db, GUILD_ID, channelId);
+}
+
 export function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -89,9 +94,11 @@ export async function signedInteraction(key: SigningKey, payload: unknown): Prom
 	});
 }
 
-const MEMBER_PERMISSIONS = { none: '0', moderator: '8' } as const;
+const MEMBER_PERMISSIONS = { none: '0', moderator: '8', manageGuild: '32' } as const;
 
-function member(id: string, permissions: keyof typeof MEMBER_PERMISSIONS = 'none') {
+type MemberPermissions = keyof typeof MEMBER_PERMISSIONS;
+
+function member(id: string, permissions: MemberPermissions = 'none') {
 	return {
 		user: { id, username: `user-${id}`, discriminator: '0', global_name: `User ${id}`, avatar: null },
 		nick: null,
@@ -104,7 +111,14 @@ function member(id: string, permissions: keyof typeof MEMBER_PERMISSIONS = 'none
 	};
 }
 
-export function commandInteraction(userId: string) {
+interface CommandInteractionOptions {
+	name?: string;
+	channelId?: string;
+	permissions?: MemberPermissions;
+}
+
+export function commandInteraction(userId: string, options: CommandInteractionOptions = {}) {
+	const channelId = options.channelId ?? CHANNEL_ID;
 	return {
 		id: '1',
 		application_id: '000000000000000001',
@@ -112,10 +126,10 @@ export function commandInteraction(userId: string) {
 		token: 'interaction-token',
 		version: 1,
 		guild_id: GUILD_ID,
-		channel: { id: CHANNEL_ID, type: 0 },
-		channel_id: CHANNEL_ID,
-		member: member(userId),
-		data: { id: 'cmd', name: 'lfg', type: 1 },
+		channel: { id: channelId, type: 0 },
+		channel_id: channelId,
+		member: member(userId, options.permissions),
+		data: { id: 'cmd', name: options.name ?? 'lfg', type: 1 },
 		locale: 'en-US',
 		app_permissions: '0',
 		entitlements: [],
@@ -123,9 +137,9 @@ export function commandInteraction(userId: string) {
 	};
 }
 
-export function modalInteraction(userId: string, fields: Record<string, string>) {
+export function modalInteraction(userId: string, fields: Record<string, string>, channelId = CHANNEL_ID) {
 	return {
-		...commandInteraction(userId),
+		...commandInteraction(userId, { channelId }),
 		type: InteractionType.ModalSubmit,
 		data: {
 			custom_id: 'mplus:create',
@@ -140,7 +154,33 @@ export function modalInteraction(userId: string, fields: Record<string, string>)
 	};
 }
 
-export function buttonInteraction(userId: string, customId: string, permissions: keyof typeof MEMBER_PERMISSIONS = 'none') {
+export function setupModalInteraction(
+	userId: string,
+	channelId: string,
+	permissions: MemberPermissions = 'moderator',
+	selectedType: ChannelType = ChannelType.GuildText,
+) {
+	return {
+		...commandInteraction(userId, { name: 'setup', permissions }),
+		type: InteractionType.ModalSubmit,
+		data: {
+			custom_id: 'mplus:setup',
+			components: [
+				{
+					type: 18,
+					component: { type: 8, custom_id: 'lfg_channel', values: [channelId] },
+				},
+			],
+			resolved: {
+				channels: {
+					[channelId]: { id: channelId, type: selectedType, name: 'mythic-plus', permissions: '0' },
+				},
+			},
+		},
+	};
+}
+
+export function buttonInteraction(userId: string, customId: string, permissions: MemberPermissions = 'none') {
 	return {
 		...commandInteraction(userId),
 		type: InteractionType.MessageComponent,
