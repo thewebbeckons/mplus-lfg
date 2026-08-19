@@ -14,14 +14,23 @@ function rosterOf(signups: Array<{ user_id: string; role: string }>): Record<str
 }
 
 describe('guild configuration', () => {
-	it('stores one channel per guild and replaces it on update', async () => {
+	it('stores one channel and timezone per guild and replaces them on update', async () => {
 		expect(await getGuildConfig(env.DB, 'guild')).toBeNull();
 
-		await setGuildConfig(env.DB, 'guild', 'channel-1');
-		await setGuildConfig(env.DB, 'guild', 'channel-2');
+		await setGuildConfig(env.DB, 'guild', 'channel-1', 'America/Chicago');
+		await setGuildConfig(env.DB, 'guild', 'channel-2', 'Europe/Paris');
 
-		expect(await getGuildConfig(env.DB, 'guild')).toEqual({ guild_id: 'guild', channel_id: 'channel-2' });
+		expect(await getGuildConfig(env.DB, 'guild')).toEqual({
+			guild_id: 'guild',
+			channel_id: 'channel-2',
+			timezone: 'Europe/Paris',
+		});
 		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_guild_config').first<{ n: number }>()).toEqual({ n: 1 });
+	});
+
+	it('defaults the timezone to UTC for a row that predates the column', async () => {
+		await env.DB.prepare("INSERT INTO mplus_guild_config (guild_id, channel_id) VALUES ('old', 'channel')").run();
+		expect(await getGuildConfig(env.DB, 'old')).toEqual({ guild_id: 'old', channel_id: 'channel', timezone: 'UTC' });
 	});
 });
 

@@ -16,6 +16,8 @@ import {
 	MODAL_FIELD,
 	MODAL_SETUP_ID,
 	SETUP_CHANNEL_FIELD,
+	SETUP_TIMEZONE_FIELD,
+	TIMEZONE_CHOICES,
 } from '../constants';
 import { getGuildConfig } from '../db';
 import type { Bindings } from '../env';
@@ -155,12 +157,34 @@ async function handleConfigurationCommand(
 		},
 	};
 
+	const timezoneSelect: APILabelComponent = {
+		type: ComponentType.Label,
+		label: 'Server timezone',
+		description: 'Start times typed into /lfg without a timezone are read in this one.',
+		component: {
+			type: ComponentType.StringSelect,
+			custom_id: SETUP_TIMEZONE_FIELD,
+			placeholder: 'Choose a timezone',
+			// Only forced on a first run. Re-opening via /settings shows the saved
+			// zone as the default, and Discord can report an untouched default as
+			// unanswered, so leave that case optional and keep the stored value.
+			required: !config,
+			min_values: config ? 0 : 1,
+			max_values: 1,
+			options: TIMEZONE_CHOICES.map((choice) => ({
+				label: choice.label,
+				value: choice.value,
+				default: choice.value === config?.timezone,
+			})),
+		},
+	};
+
 	return {
 		type: InteractionResponseType.Modal,
 		data: {
 			custom_id: MODAL_SETUP_ID,
 			title: config ? 'LFG settings' : 'Set up LFG',
-			components: [channelSelect],
+			components: [channelSelect, timezoneSelect],
 		},
 	};
 }

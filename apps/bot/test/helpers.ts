@@ -54,8 +54,10 @@ export function seedGroup(db: D1Database, options: SeedOptions = {}): Promise<Gr
 	});
 }
 
-export function configureGuild(db: D1Database, channelId = CHANNEL_ID): Promise<void> {
-	return setGuildConfig(db, GUILD_ID, channelId);
+export const TIMEZONE = 'America/New_York';
+
+export function configureGuild(db: D1Database, channelId = CHANNEL_ID, timezone = TIMEZONE): Promise<void> {
+	return setGuildConfig(db, GUILD_ID, channelId, timezone);
 }
 
 export function bytesToHex(bytes: Uint8Array): string {
@@ -159,6 +161,8 @@ export function setupModalInteraction(
 	channelId: string,
 	permissions: MemberPermissions = 'moderator',
 	selectedType: ChannelType = ChannelType.GuildText,
+	/** `null` submits no timezone at all, the way an untouched select does. */
+	timezone: string | null = 'America/Chicago',
 ) {
 	return {
 		...commandInteraction(userId, { name: 'setup', permissions }),
@@ -170,6 +174,9 @@ export function setupModalInteraction(
 					type: 18,
 					component: { type: 8, custom_id: 'lfg_channel', values: [channelId] },
 				},
+				...(timezone === null
+					? []
+					: [{ type: 18, component: { type: 3, custom_id: 'lfg_timezone', values: [timezone] } }]),
 			],
 			resolved: {
 				channels: {

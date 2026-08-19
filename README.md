@@ -6,7 +6,8 @@ updated in one shared Discord message.
 
 ## How the bot works
 
-1. A server admin runs `/setup` and chooses the dedicated LFG text channel.
+1. A server admin runs `/setup` and chooses the dedicated LFG text channel and
+   the server's timezone.
 2. In that channel, use `/lfg` and enter the activity, start time, your role,
    group composition, and any notes.
 3. The bot posts the run with buttons for Tank, Healer, and DPS.
@@ -16,7 +17,11 @@ updated in one shared Discord message.
    start time.
 
 Admins can run `/settings` later to move all LFG activity to another text
-channel.
+channel or to change the server timezone.
+
+The server timezone is how start times are read. Discord renders the posted time
+in each viewer's own local zone, so the setting only decides what a bare `8pm`
+means, not how anyone sees it.
 
 The composition field accepts simple descriptions such as `1/1/3`, `LF 2 DPS`,
 or `LF1M tank`. This supports both fresh groups and groups that already have

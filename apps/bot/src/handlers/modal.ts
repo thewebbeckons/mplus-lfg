@@ -5,8 +5,16 @@ import {
 	InteractionResponseType,
 	MessageFlags,
 } from 'discord-api-types/v10';
-import { DEFAULT_ROLE, MODAL_CREATE_ID, MODAL_FIELD, MODAL_SETUP_ID, SETUP_CHANNEL_FIELD } from '../constants';
-import { createGroup, setGuildConfig, setMessageId } from '../db';
+import {
+	DEFAULT_ROLE,
+	isOfferedTimezone,
+	MODAL_CREATE_ID,
+	MODAL_FIELD,
+	MODAL_SETUP_ID,
+	SETUP_CHANNEL_FIELD,
+	SETUP_TIMEZONE_FIELD,
+} from '../constants';
+import { createGroup, getGuildConfig, setGuildConfig, setMessageId } from '../db';
 import { fetchOriginalInteractionResponse } from '../discord';
 import { buildGroupMessage } from '../embeds';
 import type { Bindings } from '../env';
@@ -120,11 +128,25 @@ async function handleConfigurationSubmit(
 		return ephemeral('Choose a server text channel for LFG activity.');
 	}
 
-	await setGuildConfig(env.DB, interaction.guild_id, channelId);
+	// Validate what was submitted, but trust what is already stored: the offered
+	// list can change, and an admin whose saved zone dropped off it must still be
+	// able to reopen /settings and change the channel.
+	const submitted = values.get(SETUP_TIMEZONE_FIELD);
+	if (submitted !== undefined && !isOfferedTimezone(submitted)) {
+		return ephemeral('Choose a timezone before saving LFG setup.');
+	}
+	// An untouched select submits nothing at all.
+	const existing = await getGuildConfig(env.DB, interaction.guild_id);
+	const timezone = submitted ?? existing?.timezone;
+	if (timezone === undefined) {
+		return ephemeral('Choose a timezone before saving LFG setup.');
+	}
+
+	await setGuildConfig(env.DB, interaction.guild_id, channelId, timezone);
 	return {
 		type: InteractionResponseType.ChannelMessageWithSource,
 		data: {
-			content: `Setup complete! LFG commands and posts will now use <#${channelId}>.`,
+			content: `Setup complete! LFG posts will use <#${channelId}>, and start times will be read as **${timezone}**.`,
 			flags: MessageFlags.Ephemeral,
 			allowed_mentions: { parse: [] },
 		},

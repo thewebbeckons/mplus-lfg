@@ -1,5 +1,5 @@
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from 'cloudflare:test';
-import { InteractionResponseType, MessageFlags, PermissionFlagsBits } from 'discord-api-types/v10';
+import { ChannelType, InteractionResponseType, MessageFlags, PermissionFlagsBits } from 'discord-api-types/v10';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { joinId } from '../src/customId';
 import { COMMANDS } from '../src/commands';
@@ -20,6 +20,7 @@ import {
 	seedGroup,
 	setupModalInteraction,
 	signedInteraction,
+	TIMEZONE,
 } from './helpers';
 import type { SigningKey } from './helpers';
 
@@ -130,7 +131,7 @@ describe('/lfg', () => {
 	});
 
 	it('redirects commands used outside the configured channel', async () => {
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID);
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
 
 		const { body } = await post(commandInteraction('creator'));
 
@@ -161,6 +162,13 @@ describe('/setup and /settings', () => {
 			},
 		});
 		expect(body.data.components[0].component.default_values).toBeUndefined();
+		expect(body.data.components[1]).toMatchObject({
+			type: 18,
+			component: { type: 3, custom_id: 'lfg_timezone', required: true, min_values: 1, max_values: 1 },
+		});
+		// A select menu holds at most 25 options.
+		expect(body.data.components[1].component.options.length).toBeLessThanOrEqual(25);
+		expect(body.data.components[1].component.options.some((option: { default?: boolean }) => option.default)).toBe(false);
 	});
 
 	it('preselects the current channel when settings are reopened', async () => {
@@ -169,6 +177,13 @@ describe('/setup and /settings', () => {
 		expect(body.type).toBe(InteractionResponseType.Modal);
 		expect(body.data.title).toBe('LFG settings');
 		expect(body.data.components[0].component.default_values).toEqual([{ id: CHANNEL_ID, type: 'channel' }]);
+		expect(body.data.components[1].component.options).toContainEqual({
+			label: expect.stringContaining('Toronto'),
+			value: TIMEZONE,
+			default: true,
+		});
+		// Optional on a reopen, so leaving the shown default untouched keeps it.
+		expect(body.data.components[1].component).toMatchObject({ required: false, min_values: 0 });
 	});
 
 	it('rejects users without Manage Server or Administrator', async () => {
@@ -178,12 +193,68 @@ describe('/setup and /settings', () => {
 		expect(body.data.content).toContain('Manage Server');
 	});
 
-	it('saves the selected channel and confirms privately', async () => {
+	it('saves the selected channel and timezone, and confirms privately', async () => {
 		const { body } = await post(setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild'));
 
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
-		expect(body.data.content).toBe(`Setup complete! LFG commands and posts will now use <#${OTHER_CHANNEL_ID}>.`);
-		expect(await getGuildConfig(env.DB, GUILD_ID)).toEqual({ guild_id: GUILD_ID, channel_id: OTHER_CHANNEL_ID });
+		expect(body.data.content).toBe(
+			`Setup complete! LFG posts will use <#${OTHER_CHANNEL_ID}>, and start times will be read as **America/Chicago**.`,
+		);
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toEqual({
+			guild_id: GUILD_ID,
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: 'America/Chicago',
+		});
+	});
+
+	it('keeps the saved timezone when only the channel is changed', async () => {
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.content).toContain(`**${TIMEZONE}**`);
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toMatchObject({
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: TIMEZONE,
+		});
+	});
+
+	it('refuses a first-time setup that names no timezone', async () => {
+		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
+
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe('Choose a timezone before saving LFG setup.');
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toBeNull();
+	});
+
+	it('lets a guild whose saved zone is no longer offered still change channel', async () => {
+		await env.DB.prepare('UPDATE mplus_guild_config SET timezone = ?2 WHERE guild_id = ?1')
+			.bind(GUILD_ID, 'Antarctica/Troll')
+			.run();
+
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.content).toContain('**Antarctica/Troll**');
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toMatchObject({
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: 'Antarctica/Troll',
+		});
+	});
+
+	it('refuses a timezone the modal never offered', async () => {
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, 'Mars/Orgrimmar'),
+		);
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe('Choose a timezone before saving LFG setup.');
+		expect((await getGuildConfig(env.DB, GUILD_ID))?.channel_id).toBe(CHANNEL_ID);
 	});
 
 	it('rechecks permissions when the setup modal is submitted', async () => {
@@ -287,7 +358,7 @@ describe('modal submission', () => {
 	});
 
 	it('does not post when settings changed after the modal was opened', async () => {
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID);
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
 
 		const { body } = await post(modalInteraction('creator', fields));
 
@@ -349,7 +420,7 @@ describe('roster buttons', () => {
 
 	it('rejects buttons on old posts after the configured channel changes', async () => {
 		const { group } = await seedGroup(env.DB, { creatorRole: 'TANK' });
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID);
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
 
 		const { body } = await post(buttonInteraction('healer', joinId('HEALER', group.id)));
 

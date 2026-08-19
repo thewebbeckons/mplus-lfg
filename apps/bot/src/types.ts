@@ -6,6 +6,8 @@ export type GroupStatus = 'OPEN' | 'FULL' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED
 export interface GuildConfigRow {
 	guild_id: string;
 	channel_id: string;
+	/** IANA zone name, e.g. `America/Toronto`. */
+	timezone: string;
 }
 
 /** Row shape of `mplus_groups`. */

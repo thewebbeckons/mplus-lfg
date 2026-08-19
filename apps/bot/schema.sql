@@ -11,7 +11,9 @@
 -- command, interaction, and generated post.
 CREATE TABLE IF NOT EXISTS mplus_guild_config (
 	guild_id TEXT PRIMARY KEY,
-	channel_id TEXT NOT NULL
+	channel_id TEXT NOT NULL,
+	-- IANA zone name. Bare start times typed into /lfg ("8pm") are read in it.
+	timezone TEXT NOT NULL DEFAULT 'UTC'
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS mplus_groups (
