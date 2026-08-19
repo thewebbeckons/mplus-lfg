@@ -9,14 +9,20 @@ import type { Actor } from './types';
 
 /** Permissions that let someone cancel a run they did not create. */
 const MODERATOR_PERMISSIONS = PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageEvents;
+const SETUP_PERMISSIONS = PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild;
 
-function hasModeratorPermissions(permissions: string | undefined): boolean {
+function hasAnyPermission(permissions: string | undefined, required: bigint): boolean {
 	if (!permissions) return false;
 	try {
-		return (BigInt(permissions) & MODERATOR_PERMISSIONS) !== 0n;
+		return (BigInt(permissions) & required) !== 0n;
 	} catch {
 		return false;
 	}
+}
+
+/** Runtime defence for setup/settings in addition to command registration permissions. */
+export function canManageGuild(interaction: APIInteraction): boolean {
+	return hasAnyPermission(interaction.member?.permissions, SETUP_PERMISSIONS);
 }
 
 /**
@@ -31,7 +37,7 @@ export function getActor(interaction: APIInteraction): Actor | null {
 	return {
 		id: user.id,
 		displayName: interaction.member?.nick ?? user.global_name ?? user.username,
-		isAdmin: hasModeratorPermissions(interaction.member?.permissions),
+		isAdmin: hasAnyPermission(interaction.member?.permissions, MODERATOR_PERMISSIONS),
 	};
 }
 

@@ -7,6 +7,15 @@
 -- D1 enforces foreign keys by default, so no `PRAGMA foreign_keys` is needed
 -- (and PRAGMA statements are rejected over the D1 API).
 
+-- The configured channel is the server-side source of truth for every LFG
+-- command, interaction, and generated post.
+CREATE TABLE IF NOT EXISTS mplus_guild_config (
+	guild_id TEXT PRIMARY KEY,
+	channel_id TEXT NOT NULL,
+	-- IANA zone name. Bare start times typed into /lfg ("8pm") are read in it.
+	timezone TEXT NOT NULL DEFAULT 'UTC'
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS mplus_groups (
 	id TEXT PRIMARY KEY,
 	guild_id TEXT NOT NULL,

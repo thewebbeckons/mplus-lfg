@@ -1,20 +1,26 @@
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from 'cloudflare:test';
-import { InteractionResponseType, MessageFlags } from 'discord-api-types/v10';
+import { ChannelType, InteractionResponseType, MessageFlags, PermissionFlagsBits } from 'discord-api-types/v10';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { joinId } from '../src/customId';
-import { loadState } from '../src/db';
+import { COMMANDS } from '../src/commands';
+import { getGuildConfig, loadState, setGuildConfig } from '../src/db';
 import worker, { sweepExpiredGroups } from '../src/index';
 import type { GroupRow } from '../src/types';
 import {
 	CHANNEL_ID,
+	GUILD_ID,
 	IncomingRequest,
+	OTHER_CHANNEL_ID,
 	applySchema,
 	buttonInteraction,
 	commandInteraction,
+	configureGuild,
 	createSigningKey,
 	modalInteraction,
 	seedGroup,
+	setupModalInteraction,
 	signedInteraction,
+	TIMEZONE,
 } from './helpers';
 import type { SigningKey } from './helpers';
 
@@ -32,6 +38,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
 	await applySchema(env.DB, env.SCHEMA_SQL);
+	await configureGuild(env.DB);
 });
 
 afterEach(() => {
@@ -75,6 +82,17 @@ describe('request handling', () => {
 	});
 });
 
+describe('command registration', () => {
+	it('registers setup and settings as Manage Server commands', () => {
+		expect(COMMANDS.map((command) => command.name)).toEqual(['lfg', 'setup', 'settings']);
+		for (const name of ['setup', 'settings']) {
+			expect(COMMANDS.find((command) => command.name === name)?.default_member_permissions).toBe(
+				PermissionFlagsBits.ManageGuild.toString(),
+			);
+		}
+	});
+});
+
 describe('/lfg', () => {
 	it('opens the run creation modal', async () => {
 		const { body } = await post(commandInteraction('creator'));
@@ -102,6 +120,149 @@ describe('/lfg', () => {
 		expect(role.component.options.map((option: any) => option.value)).toEqual(['TANK', 'HEALER', 'DPS']);
 		expect(role.component.options.find((option: any) => option.default)?.value).toBe('DPS');
 	});
+
+	it('explains how to finish setup when the server has no LFG channel', async () => {
+		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
+
+		const { body } = await post(commandInteraction('creator'));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe("This server hasn't finished LFG setup yet. A server admin can run `/setup` to get started.");
+	});
+
+	it('redirects commands used outside the configured channel', async () => {
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+
+		const { body } = await post(commandInteraction('creator'));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe(
+			`LFG commands are available in <#${OTHER_CHANNEL_ID}>. Head over there to create or browse groups.`,
+		);
+	});
+});
+
+describe('/setup and /settings', () => {
+	it('opens a text-channel-only picker for a Manage Server user', async () => {
+		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
+
+		const { body } = await post(commandInteraction('admin', { name: 'setup', permissions: 'manageGuild' }));
+
+		expect(body.type).toBe(InteractionResponseType.Modal);
+		expect(body.data).toMatchObject({ custom_id: 'mplus:setup', title: 'Set up LFG' });
+		expect(body.data.components[0]).toMatchObject({
+			type: 18,
+			component: {
+				type: 8,
+				custom_id: 'lfg_channel',
+				channel_types: [0],
+				required: true,
+				min_values: 1,
+				max_values: 1,
+			},
+		});
+		expect(body.data.components[0].component.default_values).toBeUndefined();
+		expect(body.data.components[1]).toMatchObject({
+			type: 18,
+			component: { type: 3, custom_id: 'lfg_timezone', required: true, min_values: 1, max_values: 1 },
+		});
+		// A select menu holds at most 25 options.
+		expect(body.data.components[1].component.options.length).toBeLessThanOrEqual(25);
+		expect(body.data.components[1].component.options.some((option: { default?: boolean }) => option.default)).toBe(false);
+	});
+
+	it('preselects the current channel when settings are reopened', async () => {
+		const { body } = await post(commandInteraction('admin', { name: 'settings', permissions: 'moderator' }));
+
+		expect(body.type).toBe(InteractionResponseType.Modal);
+		expect(body.data.title).toBe('LFG settings');
+		expect(body.data.components[0].component.default_values).toEqual([{ id: CHANNEL_ID, type: 'channel' }]);
+		expect(body.data.components[1].component.options).toContainEqual({
+			label: expect.stringContaining('Toronto'),
+			value: TIMEZONE,
+			default: true,
+		});
+		// Optional on a reopen, so leaving the shown default untouched keeps it.
+		expect(body.data.components[1].component).toMatchObject({ required: false, min_values: 0 });
+	});
+
+	it('rejects users without Manage Server or Administrator', async () => {
+		const { body } = await post(commandInteraction('member', { name: 'setup' }));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toContain('Manage Server');
+	});
+
+	it('saves the selected channel and timezone, and confirms privately', async () => {
+		const { body } = await post(setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild'));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe(
+			`Setup complete! LFG posts will use <#${OTHER_CHANNEL_ID}>, and start times will be read as **America/Chicago**.`,
+		);
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toEqual({
+			guild_id: GUILD_ID,
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: 'America/Chicago',
+		});
+	});
+
+	it('keeps the saved timezone when only the channel is changed', async () => {
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.content).toContain(`**${TIMEZONE}**`);
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toMatchObject({
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: TIMEZONE,
+		});
+	});
+
+	it('refuses a first-time setup that names no timezone', async () => {
+		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
+
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe('Choose a timezone before saving LFG setup.');
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toBeNull();
+	});
+
+	it('lets a guild whose saved zone is no longer offered still change channel', async () => {
+		await env.DB.prepare('UPDATE mplus_guild_config SET timezone = ?2 WHERE guild_id = ?1')
+			.bind(GUILD_ID, 'Antarctica/Troll')
+			.run();
+
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+		);
+
+		expect(body.data.content).toContain('**Antarctica/Troll**');
+		expect(await getGuildConfig(env.DB, GUILD_ID)).toMatchObject({
+			channel_id: OTHER_CHANNEL_ID,
+			timezone: 'Antarctica/Troll',
+		});
+	});
+
+	it('refuses a timezone the modal never offered', async () => {
+		const { body } = await post(
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, 'Mars/Orgrimmar'),
+		);
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toBe('Choose a timezone before saving LFG setup.');
+		expect((await getGuildConfig(env.DB, GUILD_ID))?.channel_id).toBe(CHANNEL_ID);
+	});
+
+	it('rechecks permissions when the setup modal is submitted', async () => {
+		const { body } = await post(setupModalInteraction('member', OTHER_CHANNEL_ID, 'none'));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect((await getGuildConfig(env.DB, GUILD_ID))?.channel_id).toBe(CHANNEL_ID);
+	});
 });
 
 describe('modal submission', () => {
@@ -124,7 +285,13 @@ describe('modal submission', () => {
 		expect(body.data.allowed_mentions).toEqual({ parse: [] });
 
 		const stored = await env.DB.prepare('SELECT * FROM mplus_groups').first<GroupRow>();
-		expect(stored).toMatchObject({ activity: 'Grim Batol +11', creator_id: 'creator', status: 'OPEN', message_id: 'message-1' });
+		expect(stored).toMatchObject({
+			activity: 'Grim Batol +11',
+			creator_id: 'creator',
+			channel_id: CHANNEL_ID,
+			status: 'OPEN',
+			message_id: 'message-1',
+		});
 
 		const state = await loadState(env.DB, stored!.id);
 		expect(state?.signups).toMatchObject([{ user_id: 'creator', role: 'TANK' }]);
@@ -189,6 +356,16 @@ describe('modal submission', () => {
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
 		expect(body.data.content).toContain('1–5 players');
 	});
+
+	it('does not post when settings changed after the modal was opened', async () => {
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+
+		const { body } = await post(modalInteraction('creator', fields));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toContain(`<#${OTHER_CHANNEL_ID}>`);
+		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_groups').first<{ n: number }>()).toEqual({ n: 0 });
+	});
 });
 
 describe('roster buttons', () => {
@@ -239,6 +416,17 @@ describe('roster buttons', () => {
 		const { body } = await post(buttonInteraction('someone', 'someotherbot:click:1'));
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
 		expect(body.data.content).toContain('no longer supported');
+	});
+
+	it('rejects buttons on old posts after the configured channel changes', async () => {
+		const { group } = await seedGroup(env.DB, { creatorRole: 'TANK' });
+		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+
+		const { body } = await post(buttonInteraction('healer', joinId('HEALER', group.id)));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toContain(`<#${OTHER_CHANNEL_ID}>`);
+		expect((await loadState(env.DB, group.id))?.signups).toHaveLength(1);
 	});
 });
 

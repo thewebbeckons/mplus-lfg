@@ -1,10 +1,25 @@
-import { type APIInteractionResponse, type APIModalSubmitInteraction, InteractionResponseType } from 'discord-api-types/v10';
-import { DEFAULT_ROLE, MODAL_FIELD } from '../constants';
-import { createGroup, setMessageId } from '../db';
+import {
+	type APIInteractionResponse,
+	type APIModalSubmitInteraction,
+	ChannelType,
+	InteractionResponseType,
+	MessageFlags,
+} from 'discord-api-types/v10';
+import {
+	DEFAULT_ROLE,
+	isOfferedTimezone,
+	MODAL_CREATE_ID,
+	MODAL_FIELD,
+	MODAL_SETUP_ID,
+	SETUP_CHANNEL_FIELD,
+	SETUP_TIMEZONE_FIELD,
+} from '../constants';
+import { createGroup, getGuildConfig, setGuildConfig, setMessageId } from '../db';
 import { fetchOriginalInteractionResponse } from '../discord';
 import { buildGroupMessage } from '../embeds';
 import type { Bindings } from '../env';
-import { ephemeral, getActor } from '../interactions';
+import { canManageGuild, ephemeral, getActor } from '../interactions';
+import { requireLfgChannel } from '../lfgAccess';
 import { parseComposition, parseRole } from '../parse';
 import { parseStartTime } from '../time';
 
@@ -41,11 +56,14 @@ export async function handleModalSubmit(
 	env: Bindings,
 	ctx: ExecutionContext,
 ): Promise<APIInteractionResponse> {
+	if (interaction.data.custom_id === MODAL_SETUP_ID) return handleConfigurationSubmit(interaction, env);
+	if (interaction.data.custom_id !== MODAL_CREATE_ID) return ephemeral('That form is no longer supported.');
+
 	const actor = getActor(interaction);
 	if (!actor) return ephemeral('Could not identify you — try again.');
-	if (!interaction.guild_id || !interaction.channel?.id) {
-		return ephemeral('Mythic+ runs have to be posted in a server channel, not in DMs.');
-	}
+
+	const access = await requireLfgChannel(interaction, env.DB);
+	if (!access.allowed) return access.response;
 
 	const values = collectModalValues(interaction.data.components);
 	const activity = (values.get(MODAL_FIELD.activity) ?? '').trim();
@@ -68,8 +86,8 @@ export async function handleModalSubmit(
 
 	const state = await createGroup(env.DB, {
 		id: groupId,
-		guildId: interaction.guild_id,
-		channelId: interaction.channel.id,
+		guildId: access.guildId,
+		channelId: access.channelId,
 		creatorId: actor.id,
 		creatorName: actor.displayName,
 		creatorRole: role,
@@ -89,6 +107,49 @@ export async function handleModalSubmit(
 	return {
 		type: InteractionResponseType.ChannelMessageWithSource,
 		data: buildGroupMessage(state),
+	};
+}
+
+async function handleConfigurationSubmit(
+	interaction: APIModalSubmitInteraction,
+	env: Bindings,
+): Promise<APIInteractionResponse> {
+	if (!interaction.guild_id) return ephemeral('LFG setup is only available inside a server.');
+	if (!canManageGuild(interaction)) {
+		return ephemeral('You need **Manage Server** or **Administrator** permission to configure LFG.');
+	}
+
+	const values = collectModalValues(interaction.data.components);
+	const channelId = values.get(SETUP_CHANNEL_FIELD);
+	if (!channelId) return ephemeral('Choose a text channel before saving LFG setup.');
+
+	const selectedChannel = interaction.data.resolved?.channels?.[channelId];
+	if (!selectedChannel || selectedChannel.type !== ChannelType.GuildText) {
+		return ephemeral('Choose a server text channel for LFG activity.');
+	}
+
+	// Validate what was submitted, but trust what is already stored: the offered
+	// list can change, and an admin whose saved zone dropped off it must still be
+	// able to reopen /settings and change the channel.
+	const submitted = values.get(SETUP_TIMEZONE_FIELD);
+	if (submitted !== undefined && !isOfferedTimezone(submitted)) {
+		return ephemeral('Choose a timezone before saving LFG setup.');
+	}
+	// An untouched select submits nothing at all.
+	const existing = await getGuildConfig(env.DB, interaction.guild_id);
+	const timezone = submitted ?? existing?.timezone;
+	if (timezone === undefined) {
+		return ephemeral('Choose a timezone before saving LFG setup.');
+	}
+
+	await setGuildConfig(env.DB, interaction.guild_id, channelId, timezone);
+	return {
+		type: InteractionResponseType.ChannelMessageWithSource,
+		data: {
+			content: `Setup complete! LFG posts will use <#${channelId}>, and start times will be read as **${timezone}**.`,
+			flags: MessageFlags.Ephemeral,
+			allowed_mentions: { parse: [] },
+		},
 	};
 }
 

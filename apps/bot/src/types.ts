@@ -2,6 +2,14 @@ export type Role = 'TANK' | 'HEALER' | 'DPS';
 
 export type GroupStatus = 'OPEN' | 'FULL' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 
+/** Minimal per-server configuration stored in D1. */
+export interface GuildConfigRow {
+	guild_id: string;
+	channel_id: string;
+	/** IANA zone name, e.g. `America/Toronto`. */
+	timezone: string;
+}
+
 /** Row shape of `mplus_groups`. */
 export interface GroupRow {
 	id: string;

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cancelGroup, expireStaleGroups, joinGroup, leaveGroup, loadState } from '../src/db';
+import { cancelGroup, expireStaleGroups, getGuildConfig, joinGroup, leaveGroup, loadState, setGuildConfig } from '../src/db';
 import { applySchema, seedGroup, user } from './helpers';
 
 const NOW = 1_800_000_000;
@@ -12,6 +12,27 @@ beforeEach(async () => {
 function rosterOf(signups: Array<{ user_id: string; role: string }>): Record<string, string> {
 	return Object.fromEntries(signups.map((signup) => [signup.user_id, signup.role]));
 }
+
+describe('guild configuration', () => {
+	it('stores one channel and timezone per guild and replaces them on update', async () => {
+		expect(await getGuildConfig(env.DB, 'guild')).toBeNull();
+
+		await setGuildConfig(env.DB, 'guild', 'channel-1', 'America/Chicago');
+		await setGuildConfig(env.DB, 'guild', 'channel-2', 'Europe/Paris');
+
+		expect(await getGuildConfig(env.DB, 'guild')).toEqual({
+			guild_id: 'guild',
+			channel_id: 'channel-2',
+			timezone: 'Europe/Paris',
+		});
+		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_guild_config').first<{ n: number }>()).toEqual({ n: 1 });
+	});
+
+	it('defaults the timezone to UTC for a row that predates the column', async () => {
+		await env.DB.prepare("INSERT INTO mplus_guild_config (guild_id, channel_id) VALUES ('old', 'channel')").run();
+		expect(await getGuildConfig(env.DB, 'old')).toEqual({ guild_id: 'old', channel_id: 'channel', timezone: 'UTC' });
+	});
+});
 
 describe('createGroup', () => {
 	it('opens the run with the creator already slotted in', async () => {

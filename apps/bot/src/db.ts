@@ -1,4 +1,4 @@
-import type { GroupRow, GroupState, GroupStatus, PartyPlan, Role, SignupRow } from './types';
+import type { GroupRow, GroupState, GroupStatus, GuildConfigRow, PartyPlan, Role, SignupRow } from './types';
 
 /**
  * D1 access layer.
@@ -15,6 +15,24 @@ import type { GroupRow, GroupState, GroupStatus, PartyPlan, Role, SignupRow } fr
 
 const SELECT_GROUP_SQL = 'SELECT * FROM mplus_groups WHERE id = ?1';
 const SELECT_SIGNUPS_SQL = 'SELECT * FROM mplus_signups WHERE group_id = ?1 ORDER BY signed_at ASC, id ASC';
+
+/** The LFG channel and the timezone its start times are read in. */
+export async function getGuildConfig(db: D1Database, guildId: string): Promise<GuildConfigRow | null> {
+	return db
+		.prepare('SELECT guild_id, channel_id, timezone FROM mplus_guild_config WHERE guild_id = ?1')
+		.bind(guildId)
+		.first<GuildConfigRow>();
+}
+
+export async function setGuildConfig(db: D1Database, guildId: string, channelId: string, timezone: string): Promise<void> {
+	await db
+		.prepare(
+			`INSERT INTO mplus_guild_config (guild_id, channel_id, timezone) VALUES (?1, ?2, ?3)
+			 ON CONFLICT (guild_id) DO UPDATE SET channel_id = excluded.channel_id, timezone = excluded.timezone`,
+		)
+		.bind(guildId, channelId, timezone)
+		.run();
+}
 
 /**
  * Re-derive OPEN vs FULL from the roster. Runs after every roster change and is

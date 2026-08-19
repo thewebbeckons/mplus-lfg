@@ -6,6 +6,7 @@ import { editOriginalInteractionResponse } from '../discord';
 import { buildGroupMessage } from '../embeds';
 import type { Bindings } from '../env';
 import { ephemeral, getActor } from '../interactions';
+import { requireLfgChannel } from '../lfgAccess';
 import type { GroupState, Role } from '../types';
 
 /**
@@ -20,6 +21,9 @@ export async function handleComponent(
 ): Promise<APIInteractionResponse> {
 	const action = parseComponentId(interaction.data.custom_id);
 	if (!action) return ephemeral('That button is no longer supported.');
+
+	const access = await requireLfgChannel(interaction, env.DB);
+	if (!access.allowed) return access.response;
 
 	const actor = getActor(interaction);
 	if (!actor) return ephemeral('Could not identify you — try again.');
