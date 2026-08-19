@@ -5,7 +5,9 @@
 <template>
 	<UApp>
 		<div class="min-h-screen bg-default text-default">
-			<NuxtPage />
+			<NuxtLayout>
+				<NuxtPage />
+			</NuxtLayout>
 		</div>
 	</UApp>
 </template>
