@@ -3,9 +3,9 @@
 </script>
 
 <template>
-  <UApp>
-    <div class="min-h-screen bg-(--ui-bg) text-(--ui-text)">
-      <NuxtPage />
-    </div>
-  </UApp>
+	<UApp>
+		<div class="min-h-screen bg-default text-default">
+			<NuxtPage />
+		</div>
+	</UApp>
 </template>
