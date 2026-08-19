@@ -78,7 +78,7 @@ export async function handleModalSubmit(
 	const plan = parseComposition(values.get(MODAL_FIELD.comp) ?? '', role);
 	if (!plan.ok) return ephemeral(plan.error);
 
-	const startTime = parseStartTime(values.get(MODAL_FIELD.startTime) ?? '');
+	const startTime = parseStartTime(values.get(MODAL_FIELD.startTime) ?? '', { timezone: access.timezone });
 	if (!startTime.raw) return ephemeral('A start time is required.');
 
 	const notes = (values.get(MODAL_FIELD.notes) ?? '').trim();

@@ -51,7 +51,7 @@ const MODAL_INPUTS: TextInputSpec[] = [
 	{
 		customId: MODAL_FIELD.startTime,
 		label: 'Start time',
-		placeholder: 'e.g. in 30 mins, 8:00 PM EST, 20:00 UTC',
+		placeholder: 'e.g. in 30 mins, 8pm, 20:00',
 		style: TextInputStyle.Short,
 		required: true,
 		maxLength: 60,
@@ -74,10 +74,11 @@ const MODAL_INPUTS: TextInputSpec[] = [
 	},
 ];
 
-function textInput(input: TextInputSpec): APILabelComponent {
+function textInput(input: TextInputSpec, description?: string): APILabelComponent {
 	return {
 		type: ComponentType.Label,
 		label: input.label,
+		...(description ? { description } : {}),
 		component: {
 			type: ComponentType.TextInput,
 			custom_id: input.customId,
@@ -126,7 +127,7 @@ export async function handleCommand(
 	const access = await requireLfgChannel(interaction, env.DB);
 	if (!access.allowed) return access.response;
 
-	return createGroupModal();
+	return createGroupModal(access.timezone);
 }
 
 async function handleConfigurationCommand(
@@ -189,13 +190,23 @@ async function handleConfigurationCommand(
 	};
 }
 
-function createGroupModal(): APIInteractionResponse {
+function createGroupModal(timezone: string): APIInteractionResponse {
 	return {
 		type: InteractionResponseType.Modal,
 		data: {
 			custom_id: MODAL_CREATE_ID,
 			title: 'Start a Mythic+ group',
-			components: [textInput(MODAL_INPUTS[0]), textInput(MODAL_INPUTS[1]), ROLE_INPUT, ...MODAL_INPUTS.slice(2).map(textInput)],
+			components: [
+				textInput(MODAL_INPUTS[0]),
+				textInput(MODAL_INPUTS[1], startTimeHint(timezone)),
+				ROLE_INPUT,
+				...MODAL_INPUTS.slice(2).map((input) => textInput(input)),
+			],
 		},
 	};
+}
+
+/** A `Label` description holds 100 characters, so keep the zone name at the end. */
+function startTimeHint(timezone: string): string {
+	return `Read as ${timezone} unless you name a zone, e.g. "8pm EST".`;
 }

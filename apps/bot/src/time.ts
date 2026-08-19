@@ -91,20 +91,31 @@ export interface ParsedStartTime {
 	ts: number | null;
 }
 
+export interface ParseStartTimeOptions {
+	/**
+	 * IANA zone a time with no timezone of its own is read in — in practice the
+	 * server's configured zone, so members can type "8pm" and mean 8pm where the
+	 * guild plays. Naming a zone in the text still overrides it.
+	 */
+	timezone?: string;
+	/** Injectable for tests; defaults to the wall clock. */
+	nowMs?: number;
+}
+
 const DISCORD_TIMESTAMP = /^<t:(\d{1,12})(?::[tTdDfFR])?>$/;
 const RELATIVE = /^(?:in\s+)?((?:\d+\s*[a-z]+\s*)+?)(?:\s+from\s+now)?$/;
 const RELATIVE_PART = /(\d+)\s*([a-z]+)/g;
 const CLOCK = /^(?:@|at\s+)?(?:(today|tonight|tomorrow)\s+)?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\.?\s*([a-z]{1,4})?$/;
 const ISO_LIKE = /^\d{4}-\d{2}-\d{2}(?:[T ]|$)/;
 
-/** @param nowMs injectable for tests; defaults to wall clock. */
-export function parseStartTime(input: string, nowMs: number = Date.now()): ParsedStartTime {
+export function parseStartTime(input: string, options: ParseStartTimeOptions = {}): ParsedStartTime {
+	const { timezone = 'UTC', nowMs = Date.now() } = options;
 	const raw = input.trim();
-	const ts = resolve(raw, nowMs);
+	const ts = resolve(raw, nowMs, timezone);
 	return { raw, ts };
 }
 
-function resolve(raw: string, nowMs: number): number | null {
+function resolve(raw: string, nowMs: number, timezone: string): number | null {
 	if (!raw) return null;
 	const text = raw.toLowerCase().replace(/\s+/g, ' ').trim();
 	const nowSeconds = Math.floor(nowMs / 1000);
@@ -122,7 +133,7 @@ function resolve(raw: string, nowMs: number): number | null {
 	const relative = parseRelative(text);
 	if (relative !== null) return nowSeconds + relative;
 
-	const clock = parseClock(text, nowMs);
+	const clock = parseClock(text, nowMs, timezone);
 	if (clock !== null) return clock;
 
 	// ISO-8601, gated on actually looking like a date. `Date.parse` is wildly
@@ -154,7 +165,7 @@ function parseRelative(text: string): number | null {
 }
 
 /** "8:00 pm est", "20:00 utc", "tomorrow 9pm" -> absolute Unix seconds. */
-function parseClock(text: string, nowMs: number): number | null {
+function parseClock(text: string, nowMs: number, defaultZone: string): number | null {
 	const match = CLOCK.exec(text);
 	if (!match) return null;
 
@@ -173,9 +184,10 @@ function parseClock(text: string, nowMs: number): number | null {
 		return null;
 	}
 
-	// No timezone named means UTC. Discord renders the result in each viewer's own
-	// zone, so a creator who meant their local time sees it is wrong immediately.
-	const zone = tzText ? TZ_ZONES[tzText.toUpperCase()] : 'UTC';
+	// Naming a zone overrides the default rather than replacing the feature: people
+	// type "8pm EST" out of habit, and reading that as the server's zone instead
+	// would be silently wrong by however far apart the two sit.
+	const zone = tzText ? TZ_ZONES[tzText.toUpperCase()] : defaultZone;
 	if (zone === undefined) return null;
 
 	try {

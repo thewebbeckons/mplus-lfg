@@ -121,6 +121,18 @@ describe('/lfg', () => {
 		expect(role.component.options.find((option: any) => option.default)?.value).toBe('DPS');
 	});
 
+	it('tells the creator which timezone a bare start time will be read in', async () => {
+		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+
+		const { body } = await post(commandInteraction('creator'));
+
+		const startTime = body.data.components[1];
+		expect(startTime.component.custom_id).toBe('start_time');
+		expect(startTime.description).toBe('Read as America/Chicago unless you name a zone, e.g. "8pm EST".');
+		// A Label description holds 100 characters.
+		expect(startTime.description.length).toBeLessThanOrEqual(100);
+	});
+
 	it('explains how to finish setup when the server has no LFG channel', async () => {
 		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
 
@@ -349,6 +361,36 @@ describe('modal submission', () => {
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
 		expect(body.data.content).toContain('Tank');
 		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_groups').first<{ n: number }>()).toEqual({ n: 0 });
+	});
+
+	it('reads a start time with no zone in the server timezone', async () => {
+		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+		fetchMock.get('https://discord.com').intercept({ method: 'GET', path: ORIGINAL_MESSAGE_PATH }).reply(200, { id: 'message-1' });
+
+		await post(modalInteraction('creator', { ...fields, start_time: '8pm' }));
+
+		const row = await env.DB.prepare('SELECT start_ts FROM mplus_groups').first<{ start_ts: number }>();
+		const inChicago = new Intl.DateTimeFormat('en-US', {
+			timeZone: 'America/Chicago',
+			hour: 'numeric',
+			minute: '2-digit',
+		}).format(new Date(row!.start_ts * 1000));
+		expect(inChicago).toBe('8:00 PM');
+	});
+
+	it('lets a named zone in the start time override the server timezone', async () => {
+		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+		fetchMock.get('https://discord.com').intercept({ method: 'GET', path: ORIGINAL_MESSAGE_PATH }).reply(200, { id: 'message-1' });
+
+		await post(modalInteraction('creator', { ...fields, start_time: '8pm EST' }));
+
+		const row = await env.DB.prepare('SELECT start_ts FROM mplus_groups').first<{ start_ts: number }>();
+		const inNewYork = new Intl.DateTimeFormat('en-US', {
+			timeZone: 'America/New_York',
+			hour: 'numeric',
+			minute: '2-digit',
+		}).format(new Date(row!.start_ts * 1000));
+		expect(inNewYork).toBe('8:00 PM');
 	});
 
 	it('rejects a composition that cannot fit a party', async () => {
