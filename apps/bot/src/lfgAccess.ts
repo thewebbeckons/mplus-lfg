@@ -9,7 +9,7 @@ interface InteractionLocation {
 }
 
 export type LfgAccess =
-	| { allowed: true; guildId: string; channelId: string }
+	| { allowed: true; guildId: string; channelId: string; timezone: string }
 	| { allowed: false; response: APIInteractionResponse };
 
 /**
@@ -42,5 +42,5 @@ export async function requireLfgChannel(interaction: APIInteraction & Interactio
 		};
 	}
 
-	return { allowed: true, guildId: config.guild_id, channelId: config.channel_id };
+	return { allowed: true, guildId: config.guild_id, channelId: config.channel_id, timezone: config.timezone };
 }

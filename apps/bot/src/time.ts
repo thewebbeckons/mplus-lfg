@@ -8,42 +8,59 @@
  */
 
 /**
- * Fixed UTC offsets in minutes. Abbreviations are inherently ambiguous; these are
- * the readings a WoW guild means in practice (`BST` = British Summer Time).
+ * Timezone abbreviations resolve to IANA zones rather than fixed offsets.
+ * Almost nobody who types `CST` means "UTC-6 all year" — they mean US Central
+ * time, which is UTC-5 for the eight months it observes daylight saving. Reading
+ * the abbreviation literally scheduled every summer run an hour late, so the
+ * offset is looked up for the instant the run actually falls on.
+ *
+ * `ET`/`CT`/`MT`/`PT`/`AKT` are the same zones spelled without a DST claim, and
+ * are what people reach for when they are not sure which half of the year it is.
+ *
+ * Abbreviations that mean different things in different places resolve to the
+ * reading a WoW guild means in practice: `CST` is US Central rather than China,
+ * `IST` is India, `BST` is the UK.
  */
-const TZ_OFFSET_MINUTES: Record<string, number> = {
-	UTC: 0,
-	GMT: 0,
-	Z: 0,
-	EST: -300,
-	EDT: -240,
-	CST: -360,
-	CDT: -300,
-	MST: -420,
-	MDT: -360,
-	PST: -480,
-	PDT: -420,
-	AKST: -540,
-	AKDT: -480,
-	HST: -600,
-	BRT: -180,
-	WET: 0,
-	WEST: 60,
-	BST: 60,
-	CET: 60,
-	CEST: 120,
-	EET: 120,
-	EEST: 180,
-	MSK: 180,
-	IST: 330,
-	JST: 540,
-	KST: 540,
-	AWST: 480,
-	ACST: 570,
-	AEST: 600,
-	AEDT: 660,
-	NZST: 720,
-	NZDT: 780,
+const TZ_ZONES: Record<string, string> = {
+	UTC: 'UTC',
+	GMT: 'UTC',
+	Z: 'UTC',
+	EST: 'America/New_York',
+	EDT: 'America/New_York',
+	ET: 'America/New_York',
+	CST: 'America/Chicago',
+	CDT: 'America/Chicago',
+	CT: 'America/Chicago',
+	MST: 'America/Denver',
+	MDT: 'America/Denver',
+	MT: 'America/Denver',
+	PST: 'America/Los_Angeles',
+	PDT: 'America/Los_Angeles',
+	PT: 'America/Los_Angeles',
+	AKST: 'America/Anchorage',
+	AKDT: 'America/Anchorage',
+	AKT: 'America/Anchorage',
+	HST: 'Pacific/Honolulu',
+	BRT: 'America/Sao_Paulo',
+	WET: 'Europe/Lisbon',
+	WEST: 'Europe/Lisbon',
+	BST: 'Europe/London',
+	CET: 'Europe/Paris',
+	CEST: 'Europe/Paris',
+	EET: 'Europe/Athens',
+	EEST: 'Europe/Athens',
+	MSK: 'Europe/Moscow',
+	IST: 'Asia/Kolkata',
+	JST: 'Asia/Tokyo',
+	KST: 'Asia/Seoul',
+	AWST: 'Australia/Perth',
+	ACST: 'Australia/Adelaide',
+	ACDT: 'Australia/Adelaide',
+	AEST: 'Australia/Sydney',
+	AEDT: 'Australia/Sydney',
+	AET: 'Australia/Sydney',
+	NZST: 'Pacific/Auckland',
+	NZDT: 'Pacific/Auckland',
 };
 
 const UNIT_SECONDS: Record<string, number> = {
@@ -74,20 +91,31 @@ export interface ParsedStartTime {
 	ts: number | null;
 }
 
+export interface ParseStartTimeOptions {
+	/**
+	 * IANA zone a time with no timezone of its own is read in — in practice the
+	 * server's configured zone, so members can type "8pm" and mean 8pm where the
+	 * guild plays. Naming a zone in the text still overrides it.
+	 */
+	timezone?: string;
+	/** Injectable for tests; defaults to the wall clock. */
+	nowMs?: number;
+}
+
 const DISCORD_TIMESTAMP = /^<t:(\d{1,12})(?::[tTdDfFR])?>$/;
 const RELATIVE = /^(?:in\s+)?((?:\d+\s*[a-z]+\s*)+?)(?:\s+from\s+now)?$/;
 const RELATIVE_PART = /(\d+)\s*([a-z]+)/g;
 const CLOCK = /^(?:@|at\s+)?(?:(today|tonight|tomorrow)\s+)?(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\.?\s*([a-z]{1,4})?$/;
 const ISO_LIKE = /^\d{4}-\d{2}-\d{2}(?:[T ]|$)/;
 
-/** @param nowMs injectable for tests; defaults to wall clock. */
-export function parseStartTime(input: string, nowMs: number = Date.now()): ParsedStartTime {
+export function parseStartTime(input: string, options: ParseStartTimeOptions = {}): ParsedStartTime {
+	const { timezone = 'UTC', nowMs = Date.now() } = options;
 	const raw = input.trim();
-	const ts = resolve(raw, nowMs);
+	const ts = resolve(raw, nowMs, timezone);
 	return { raw, ts };
 }
 
-function resolve(raw: string, nowMs: number): number | null {
+function resolve(raw: string, nowMs: number, timezone: string): number | null {
 	if (!raw) return null;
 	const text = raw.toLowerCase().replace(/\s+/g, ' ').trim();
 	const nowSeconds = Math.floor(nowMs / 1000);
@@ -105,7 +133,7 @@ function resolve(raw: string, nowMs: number): number | null {
 	const relative = parseRelative(text);
 	if (relative !== null) return nowSeconds + relative;
 
-	const clock = parseClock(text, nowMs);
+	const clock = parseClock(text, nowMs, timezone);
 	if (clock !== null) return clock;
 
 	// ISO-8601, gated on actually looking like a date. `Date.parse` is wildly
@@ -137,7 +165,7 @@ function parseRelative(text: string): number | null {
 }
 
 /** "8:00 pm est", "20:00 utc", "tomorrow 9pm" -> absolute Unix seconds. */
-function parseClock(text: string, nowMs: number): number | null {
+function parseClock(text: string, nowMs: number, defaultZone: string): number | null {
 	const match = CLOCK.exec(text);
 	if (!match) return null;
 
@@ -156,25 +184,102 @@ function parseClock(text: string, nowMs: number): number | null {
 		return null;
 	}
 
-	let offsetMinutes = 0;
-	if (tzText) {
-		const known = TZ_OFFSET_MINUTES[tzText.toUpperCase()];
-		if (known === undefined) return null;
-		offsetMinutes = known;
-	}
+	// Naming a zone overrides the default rather than replacing the feature: people
+	// type "8pm EST" out of habit, and reading that as the server's zone instead
+	// would be silently wrong by however far apart the two sit.
+	const zone = tzText ? TZ_ZONES[tzText.toUpperCase()] : defaultZone;
+	if (zone === undefined) return null;
 
-	// Work in "local" time by shifting the clock, then shift the result back.
-	const offsetMs = offsetMinutes * 60_000;
-	const local = new Date(nowMs + offsetMs);
-	let target = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), hour, minute) - offsetMs;
+	try {
+		// "8pm" means 8pm on whatever day it currently is *in that zone*, which is
+		// not always the same calendar day it is in UTC.
+		const today = zoneWallClock(zone, nowMs);
+		let target = instantInZone(zone, today.year, today.month, today.day, hour, minute);
 
-	if (dayWord === 'tomorrow') {
-		target += 86_400_000;
-	} else if (!dayWord && target <= nowMs) {
-		// "8pm" said at 9pm means tomorrow.
-		target += 86_400_000;
+		// "8pm" said at 9pm means tomorrow. Roll by a calendar day rather than
+		// 86_400_000ms: the day a clock change lands on is 23 or 25 hours long.
+		if (dayWord === 'tomorrow' || (!dayWord && target <= nowMs)) {
+			target = instantInZone(zone, today.year, today.month, today.day + 1, hour, minute);
+		}
+		return Math.floor(target / 1000);
+	} catch {
+		// A runtime without timezone data. Better to show the text verbatim than to
+		// invent a timestamp the cron sweep would act on.
+		return null;
 	}
-	return Math.floor(target / 1000);
+}
+
+interface WallClock {
+	year: number;
+	/** 1-12, as `Intl` reports it — not the 0-11 `Date` uses. */
+	month: number;
+	day: number;
+	hour: number;
+	minute: number;
+	second: number;
+}
+
+const ZONE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+
+function zoneFormatter(timeZone: string): Intl.DateTimeFormat {
+	let formatter = ZONE_FORMATTERS.get(timeZone);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat('en-US', {
+			timeZone,
+			// `h23` rather than `hour12: false`, which reports midnight as hour 24.
+			hourCycle: 'h23',
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		});
+		ZONE_FORMATTERS.set(timeZone, formatter);
+	}
+	return formatter;
+}
+
+/** What a clock in `timeZone` reads at the given instant. */
+function zoneWallClock(timeZone: string, atMs: number): WallClock {
+	const parts = zoneFormatter(timeZone).formatToParts(new Date(atMs));
+	const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+	return {
+		year: read('year'),
+		month: read('month'),
+		day: read('day'),
+		hour: read('hour'),
+		minute: read('minute'),
+		second: read('second'),
+	};
+}
+
+/** How far `timeZone` sits from UTC at the given instant, in minutes. */
+function zoneOffsetMinutes(timeZone: string, atMs: number): number {
+	const wall = zoneWallClock(timeZone, atMs);
+	const asIfUTC = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
+	// `Date.UTC` has no sub-second component, so compare against a whole second.
+	return (asIfUTC - Math.floor(atMs / 1000) * 1000) / 60_000;
+}
+
+/**
+ * The instant at which a clock in `timeZone` reads the given date and time.
+ * `month` is 1-12 and `day` may overflow its month, the way `Date.UTC` allows.
+ */
+function instantInZone(timeZone: string, year: number, month: number, day: number, hour: number, minute: number): number {
+	const wall = Date.UTC(year, month - 1, day, hour, minute);
+	// The offset depends on the instant and the instant depends on the offset, so
+	// guess using the offset in force at the wall-clock reading and correct once.
+	const guess = wall - zoneOffsetMinutes(timeZone, wall) * 60_000;
+	const guessOffset = zoneOffsetMinutes(timeZone, guess);
+	const corrected = wall - guessOffset * 60_000;
+	// The correction settles every reading a clock in `timeZone` actually shows. A
+	// time inside a spring-forward gap shows on no clock, and correcting it lands
+	// *before* the gap — "2:30am" on a US spring-forward day would come back as
+	// 1:30am, earlier than what was asked for. Keep `guess` in that case, which
+	// shifts the request forward by the length of the gap: 2:30am becomes 3:30am.
+	if (zoneOffsetMinutes(timeZone, corrected) !== guessOffset) return guess;
+	return corrected;
 }
 
 /** Render for an embed: localised Discord markup when resolved, plain text otherwise. */
