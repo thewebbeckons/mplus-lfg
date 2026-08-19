@@ -89,7 +89,7 @@ const syntaxExamples = [
           <NuxtLink to="/#features" class="hover:text-(--ui-text-highlighted) transition-colors">Features</NuxtLink>
           <NuxtLink to="/#how-it-works" class="hover:text-(--ui-text-highlighted) transition-colors">How It Works</NuxtLink>
           <NuxtLink to="/#syntax" class="hover:text-(--ui-text-highlighted) transition-colors">Group Examples</NuxtLink>
-          <NuxtLink v-if="githubUrl" :to="githubUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors">GitHub</NuxtLink>
+          <NuxtLink v-if="githubUrl" :to="githubUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors" data-insightflare-event="github_link_click" data-insightflare-event-location="nav">GitHub</NuxtLink>
         </nav>
 
         <!-- Header Actions -->
@@ -112,6 +112,8 @@ const syntaxExamples = [
             color="primary"
             class="bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2] text-white disabled:text-white border-0"
             icon="i-simple-icons-discord"
+            data-insightflare-event="add_to_discord_click"
+            data-insightflare-event-location="header"
           >
             Add to Discord
           </UButton>
@@ -151,6 +153,8 @@ const syntaxExamples = [
               size="xl"
               class="w-full sm:w-auto bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2] text-white disabled:text-white font-semibold shadow-lg shadow-[#5865F2]/20 px-8"
               icon="i-simple-icons-discord"
+              data-insightflare-event="add_to_discord_click"
+              data-insightflare-event-location="hero"
             >
               Add to Discord
             </UButton>
@@ -165,6 +169,8 @@ const syntaxExamples = [
               variant="subtle"
               class="w-full sm:w-auto"
               icon="i-simple-icons-github"
+              data-insightflare-event="github_link_click"
+              data-insightflare-event-location="hero"
             >
               View on GitHub
             </UButton>
@@ -302,6 +308,8 @@ const syntaxExamples = [
                   size="xl"
                   class="w-full sm:w-auto bg-white disabled:bg-white text-[#5865F2] disabled:text-[#5865F2] hover:bg-white/90 font-bold px-8 shadow-md"
                   icon="i-simple-icons-discord"
+                  data-insightflare-event="add_to_discord_click"
+                  data-insightflare-event-location="cta"
                 >
                   Add to Discord
                 </UButton>
@@ -314,6 +322,8 @@ const syntaxExamples = [
                   variant="outline"
                   class="w-full sm:w-auto text-white border-white/40 hover:bg-white/10"
                   icon="i-simple-icons-github"
+                  data-insightflare-event="github_link_click"
+                  data-insightflare-event-location="cta"
                 >
                   GitHub Repository
                 </UButton>
@@ -340,10 +350,10 @@ const syntaxExamples = [
         </div>
 
         <div class="flex items-center gap-4">
-          <NuxtLink v-if="githubUrl" :to="githubUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors">
+          <NuxtLink v-if="githubUrl" :to="githubUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors" data-insightflare-event="github_link_click" data-insightflare-event-location="footer">
             GitHub
           </NuxtLink>
-          <NuxtLink v-if="inviteUrl" :to="inviteUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors">
+          <NuxtLink v-if="inviteUrl" :to="inviteUrl" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors" data-insightflare-event="add_to_discord_click" data-insightflare-event-location="footer">
             Invite Bot
           </NuxtLink>
         </div>
