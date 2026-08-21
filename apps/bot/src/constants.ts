@@ -117,3 +117,16 @@ export const MAX_GROUP_AGE_SECONDS = 4 * 60 * 60;
 
 /** Upper bound on messages the cron sweep edits per invocation, to stay inside subrequest limits. */
 export const EXPIRY_SWEEP_LIMIT = 40;
+
+/**
+ * How long a run's data survives past its start time before the cron deletes it.
+ *
+ * Nothing reads a run once it has started: the sweep above has already rewritten
+ * its message and killed the buttons. Keeping the row after that stores Discord
+ * user ids, display names, and whatever was typed into `notes` for no purpose,
+ * so retention is deliberately short.
+ */
+export const PURGE_AFTER_SECONDS = 24 * 60 * 60;
+
+/** Upper bound on runs deleted per invocation, to bound the statement's work. */
+export const PURGE_SWEEP_LIMIT = 500;

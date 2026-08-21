@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { joinId } from '../src/customId';
 import { COMMANDS } from '../src/commands';
 import { getGuildConfig, loadState, setGuildConfig } from '../src/db';
-import worker, { sweepExpiredGroups } from '../src/index';
+import worker, { purgeOldRuns, sweepExpiredGroups } from '../src/index';
 import type { GroupRow } from '../src/types';
 import {
 	CHANNEL_ID,
@@ -490,5 +490,36 @@ describe('scheduled sweep', () => {
 	it('does nothing when there is nothing stale', async () => {
 		await seedGroup(env.DB);
 		expect(await sweepExpiredGroups(env)).toBe(0);
+	});
+});
+
+describe('retention purge', () => {
+	const RETENTION = 24 * 3600;
+
+	it('deletes runs whose retention window has elapsed, roster included', async () => {
+		const longGone = Math.floor(Date.now() / 1000) - RETENTION - 3600;
+		const { group } = await seedGroup(env.DB, { startTs: longGone, createdAt: longGone });
+
+		expect(await purgeOldRuns(env)).toBe(1);
+		expect(await loadState(env.DB, group.id)).toBeNull();
+		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_signups').first<{ n: number }>()).toEqual({ n: 0 });
+	});
+
+	it('leaves a run alone that has only just expired', async () => {
+		const justStarted = Math.floor(Date.now() / 1000) - 2 * 3600;
+		await seedGroup(env.DB, { startTs: justStarted, createdAt: justStarted });
+
+		expect(await purgeOldRuns(env)).toBe(0);
+	});
+
+	it('tells anyone clicking a purged run that it is gone', async () => {
+		const longGone = Math.floor(Date.now() / 1000) - RETENTION - 3600;
+		const { group } = await seedGroup(env.DB, { startTs: longGone, createdAt: longGone });
+		await purgeOldRuns(env);
+
+		const { body } = await post(buttonInteraction('healer', joinId('HEALER', group.id)));
+
+		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
+		expect(body.data.content).toContain('no longer tracked');
 	});
 });

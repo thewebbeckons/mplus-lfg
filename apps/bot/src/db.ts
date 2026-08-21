@@ -300,3 +300,40 @@ export async function expireStaleGroups(
 		signups: signupsByGroup.get(group.id) ?? [],
 	}));
 }
+
+/**
+ * Deletes runs whose retention window has elapsed, roster included.
+ *
+ * Retention is measured from the run's start time, falling back to when it was
+ * posted for runs whose start time we could never parse — the same clock the
+ * expiry sweep uses, so a run posted a week in advance is not purged before it
+ * happens. Status is deliberately not part of the condition: age alone is
+ * self-healing, so a run the expiry sweep somehow missed still gets cleaned up
+ * rather than living forever.
+ *
+ * Signups are removed explicitly rather than left to `ON DELETE CASCADE`, so
+ * the roster and its group always go in one batch — one implicit transaction —
+ * regardless of how foreign keys are enforced.
+ */
+export async function purgeGroupsPastRetention(
+	db: D1Database,
+	nowSeconds: number,
+	retentionSeconds: number,
+	limit: number,
+): Promise<number> {
+	// `id` breaks ties so both statements select exactly the same rows at the
+	// limit boundary; otherwise a purge could orphan a roster.
+	const doomedIds = `
+		SELECT id FROM mplus_groups
+		WHERE COALESCE(start_ts, created_at) < ?1
+		ORDER BY COALESCE(start_ts, created_at) ASC, id ASC
+		LIMIT ?2`;
+
+	const cutoff = nowSeconds - retentionSeconds;
+	const results = await db.batch([
+		db.prepare(`DELETE FROM mplus_signups WHERE group_id IN (${doomedIds})`).bind(cutoff, limit),
+		db.prepare(`DELETE FROM mplus_groups WHERE id IN (${doomedIds})`).bind(cutoff, limit),
+	]);
+
+	return results[1]?.meta.changes ?? 0;
+}

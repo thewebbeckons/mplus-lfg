@@ -1,6 +1,15 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cancelGroup, expireStaleGroups, getGuildConfig, joinGroup, leaveGroup, loadState, setGuildConfig } from '../src/db';
+import {
+	cancelGroup,
+	expireStaleGroups,
+	getGuildConfig,
+	joinGroup,
+	leaveGroup,
+	loadState,
+	purgeGroupsPastRetention,
+	setGuildConfig,
+} from '../src/db';
 import { applySchema, seedGroup, user } from './helpers';
 
 const NOW = 1_800_000_000;
@@ -278,5 +287,81 @@ describe('expireStaleGroups', () => {
 			await seedGroup(env.DB, { startTs: NOW - GRACE - 60, createdAt: NOW - 7200 + index });
 		}
 		expect(await expireStaleGroups(env.DB, NOW, GRACE, MAX_AGE, 2)).toHaveLength(2);
+	});
+});
+
+describe('purgeGroupsPastRetention', () => {
+	const RETENTION = 24 * 3600;
+
+	async function groupCount(): Promise<number> {
+		const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_groups').first<{ n: number }>();
+		return row?.n ?? 0;
+	}
+
+	async function signupCount(): Promise<number> {
+		const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_signups').first<{ n: number }>();
+		return row?.n ?? 0;
+	}
+
+	it('deletes a run once its start time is past the retention window', async () => {
+		const { group } = await seedGroup(env.DB, { startTs: NOW - RETENTION - 60, createdAt: NOW - RETENTION - 3600 });
+
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500)).toBe(1);
+		expect(await loadState(env.DB, group.id)).toBeNull();
+	});
+
+	it('takes the roster with it', async () => {
+		const { group } = await seedGroup(env.DB, { startTs: NOW - RETENTION - 60, createdAt: NOW - RETENTION - 3600 });
+		await joinGroup(env.DB, group.id, user('healer'), 'HEALER', NOW - RETENTION - 30);
+		expect(await signupCount()).toBe(2);
+
+		await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500);
+		expect(await signupCount()).toBe(0);
+	});
+
+	it('keeps a run that started recently', async () => {
+		await seedGroup(env.DB, { startTs: NOW - 3600, createdAt: NOW - 7200 });
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500)).toBe(0);
+		expect(await groupCount()).toBe(1);
+	});
+
+	it('keeps a run scheduled for next week no matter how long ago it was posted', async () => {
+		await seedGroup(env.DB, { startTs: NOW + 7 * 86400, createdAt: NOW - RETENTION - 86400 });
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500)).toBe(0);
+		expect(await groupCount()).toBe(1);
+	});
+
+	it('falls back to the post time when the start time was never parsed', async () => {
+		await seedGroup(env.DB, { startTs: null, createdAt: NOW - RETENTION - 60 });
+		await seedGroup(env.DB, { startTs: null, createdAt: NOW - 60 });
+
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500)).toBe(1);
+		expect(await groupCount()).toBe(1);
+	});
+
+	it('deletes on age alone, so a run the expiry sweep missed is still cleaned up', async () => {
+		const { group } = await seedGroup(env.DB, { startTs: NOW - RETENTION - 60, createdAt: NOW - RETENTION - 3600 });
+		expect((await loadState(env.DB, group.id))?.group.status).toBe('OPEN');
+
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500)).toBe(1);
+	});
+
+	it('leaves guild configuration alone', async () => {
+		await setGuildConfig(env.DB, 'guild', 'channel', 'America/Chicago');
+		await seedGroup(env.DB, { startTs: NOW - RETENTION - 60, createdAt: NOW - RETENTION - 3600 });
+
+		await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500);
+		expect(await getGuildConfig(env.DB, 'guild')).not.toBeNull();
+	});
+
+	it('honours the purge limit without orphaning a roster', async () => {
+		for (let index = 0; index < 3; index++) {
+			await seedGroup(env.DB, { startTs: NOW - RETENTION - 60 + index, createdAt: NOW - RETENTION - 3600 });
+		}
+
+		expect(await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 2)).toBe(2);
+		expect(await groupCount()).toBe(1);
+		// Each seeded run has exactly one signup: the creator.
+		expect(await signupCount()).toBe(1);
 	});
 });

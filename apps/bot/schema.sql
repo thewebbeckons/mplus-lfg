@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS mplus_groups (
 CREATE INDEX IF NOT EXISTS idx_mplus_groups_live ON mplus_groups (status, start_ts, created_at);
 CREATE INDEX IF NOT EXISTS idx_mplus_groups_guild ON mplus_groups (guild_id, status, created_at);
 
+-- Drives the retention purge, which is keyed to the start time and falls back to
+-- the post time for runs whose start time was never parsed. Indexing the same
+-- expression keeps the purge from scanning the whole table every ten minutes.
+CREATE INDEX IF NOT EXISTS idx_mplus_groups_retention ON mplus_groups (COALESCE(start_ts, created_at));
+
 CREATE TABLE IF NOT EXISTS mplus_signups (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	group_id TEXT NOT NULL REFERENCES mplus_groups (id) ON DELETE CASCADE,

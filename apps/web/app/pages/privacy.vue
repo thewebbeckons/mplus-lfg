@@ -25,9 +25,16 @@ const sections = [
     ]
   },
   {
+    title: 'How long we keep it',
+    body: [
+      'Run data is deleted automatically about 24 hours after the run’s scheduled start time — or after it was posted, for runs where the start time could not be read. Deleting a run removes its roster with it, including the user IDs, usernames, and anything typed into the notes.',
+      'The only thing kept beyond that is your server’s setup: the LFG channel and timezone chosen with /setup. That contains no personal information and stays until it is changed or removed.'
+    ]
+  },
+  {
     title: 'Removing your data',
     body: [
-      'Removing mplus-lfg from your server stops any further collection for that server. To request removal of existing data, open an issue on GitHub.'
+      'Removing mplus-lfg from your server stops any further collection for that server, and any runs still on file age out within 24 hours as described above. To request removal of your server’s setup, open an issue on GitHub.'
     ]
   },
   {
@@ -46,7 +53,7 @@ const sections = [
         Privacy Policy
       </h1>
       <p class="mt-3 text-sm text-(--ui-text-muted)">
-        Last updated August 19, 2026
+        Last updated August 20, 2026
       </p>
       <p class="mt-6 text-(--ui-text-muted) leading-relaxed">
         mplus-lfg only collects what it needs to make the group finder work, nothing more. This page explains exactly what that is.

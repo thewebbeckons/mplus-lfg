@@ -1,6 +1,12 @@
 import { type APIInteraction, type APIInteractionResponse, InteractionResponseType, InteractionType } from 'discord-api-types/v10';
-import { EXPIRY_GRACE_SECONDS, EXPIRY_SWEEP_LIMIT, MAX_GROUP_AGE_SECONDS } from './constants';
-import { expireStaleGroups } from './db';
+import {
+	EXPIRY_GRACE_SECONDS,
+	EXPIRY_SWEEP_LIMIT,
+	MAX_GROUP_AGE_SECONDS,
+	PURGE_AFTER_SECONDS,
+	PURGE_SWEEP_LIMIT,
+} from './constants';
+import { expireStaleGroups, purgeGroupsPastRetention } from './db';
 import { editChannelMessage } from './discord';
 import { buildGroupMessage } from './embeds';
 import type { Bindings } from './env';
@@ -14,7 +20,7 @@ import { verifyDiscordRequest } from './verify';
  * Serverless Mythic+ LFG bot.
  *
  * `fetch`     — Discord HTTP interactions (no gateway, no persistent connection).
- * `scheduled` — cron sweep that expires stale runs and closes out their messages.
+ * `scheduled` — cron maintenance: expires stale runs, then deletes old ones.
  */
 
 async function route(interaction: APIInteraction, env: Bindings, ctx: ExecutionContext): Promise<APIInteractionResponse> {
@@ -69,9 +75,20 @@ export default {
 	},
 
 	async scheduled(_controller, env, ctx): Promise<void> {
-		ctx.waitUntil(sweepExpiredGroups(env));
+		ctx.waitUntil(runMaintenance(env));
 	},
 } satisfies ExportedHandler<Bindings>;
+
+/**
+ * Expiry runs before the purge, so a run is never deleted before its message
+ * has been closed out. The two windows are far enough apart that this is a
+ * formality — a run is expired half an hour after it starts and deleted a day
+ * later — but the order makes the dependency explicit.
+ */
+async function runMaintenance(env: Bindings): Promise<void> {
+	await sweepExpiredGroups(env);
+	await purgeOldRuns(env);
+}
 
 /**
  * Marks runs whose start time has passed (or which we could never date and are
@@ -92,4 +109,17 @@ export async function sweepExpiredGroups(env: Bindings): Promise<number> {
 	await Promise.allSettled(edits);
 	console.log(`Expired ${expired.length} Mythic+ run(s), refreshed ${edits.length} message(s)`);
 	return expired.length;
+}
+
+/**
+ * Deletes runs past their retention window along with their rosters. The
+ * Discord messages are left alone: the sweep above already rewrote them into a
+ * closed state with dead buttons, and anyone who does click one on an unedited
+ * post gets a plain "that run no longer exists" reply.
+ */
+export async function purgeOldRuns(env: Bindings): Promise<number> {
+	const nowSeconds = Math.floor(Date.now() / 1000);
+	const purged = await purgeGroupsPastRetention(env.DB, nowSeconds, PURGE_AFTER_SECONDS, PURGE_SWEEP_LIMIT);
+	if (purged > 0) console.log(`Purged ${purged} Mythic+ run(s) past the retention window`);
+	return purged;
 }
