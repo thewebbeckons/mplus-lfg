@@ -7,7 +7,7 @@ import {
 } from 'discord-api-types/v10';
 import type { Actor } from './types';
 
-/** Permissions that let someone cancel a run they did not create. */
+/** Permissions that let someone act on a post they did not create. */
 const MODERATOR_PERMISSIONS = PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild | PermissionFlagsBits.ManageEvents;
 const SETUP_PERMISSIONS = PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild;
 
@@ -38,6 +38,7 @@ export function getActor(interaction: APIInteraction): Actor | null {
 		id: user.id,
 		displayName: interaction.member?.nick ?? user.global_name ?? user.username,
 		isAdmin: hasAnyPermission(interaction.member?.permissions, MODERATOR_PERMISSIONS),
+		roleIds: interaction.member?.roles ?? [],
 	};
 }
 
@@ -47,4 +48,21 @@ export function ephemeral(content: string): APIInteractionResponse {
 		type: InteractionResponseType.ChannelMessageWithSource,
 		data: { content, flags: MessageFlags.Ephemeral },
 	};
+}
+
+/**
+ * A private "thinking…" placeholder, acknowledging inside Discord's 3 second
+ * window so slower work (an item metadata lookup, a post to the channel) can
+ * happen afterwards and edit this response when it finishes.
+ */
+export function deferEphemeral(): APIInteractionResponse {
+	return {
+		type: InteractionResponseType.DeferredChannelMessageWithSource,
+		data: { flags: MessageFlags.Ephemeral },
+	};
+}
+
+/** Ephemeral message body for editing a deferred response after the fact. */
+export function ephemeralBody(content: string): Record<string, unknown> {
+	return { content, flags: MessageFlags.Ephemeral, allowed_mentions: { parse: [] } };
 }

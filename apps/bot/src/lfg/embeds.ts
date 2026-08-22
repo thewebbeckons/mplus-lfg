@@ -9,7 +9,7 @@ import {
 } from 'discord-api-types/v10';
 import { LIVE_STATUSES, ROLES, ROLE_META, STATUS_META } from './constants';
 import { cancelId, joinId, leaveId } from './customId';
-import { formatStartTime } from './time';
+import { formatStartTime } from '../time';
 import type { GroupRow, GroupState, Role, SignupRow } from './types';
 
 /**

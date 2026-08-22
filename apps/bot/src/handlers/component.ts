@@ -1,17 +1,22 @@
 import { type APIInteractionResponse, type APIMessageComponentInteraction, InteractionResponseType } from 'discord-api-types/v10';
-import { ROLE_META } from '../constants';
-import { parseComponentId } from '../customId';
-import { type CancelOutcome, type JoinOutcome, type LeaveOutcome, type MutationResult, cancelGroup, joinGroup, leaveGroup } from '../db';
+import { isCraftComponentId } from '../craft/customId';
+import { handleCraftComponent } from '../craft/flow';
 import { editOriginalInteractionResponse } from '../discord';
-import { buildGroupMessage } from '../embeds';
 import type { Bindings } from '../env';
 import { ephemeral, getActor } from '../interactions';
-import { requireLfgChannel } from '../lfgAccess';
-import type { GroupState, Role } from '../types';
+import { requireLfgChannel } from '../lfg/access';
+import { ROLE_META } from '../lfg/constants';
+import { parseComponentId } from '../lfg/customId';
+import { type CancelOutcome, type JoinOutcome, type LeaveOutcome, type MutationResult, cancelGroup, joinGroup, leaveGroup } from '../lfg/db';
+import { buildGroupMessage } from '../lfg/embeds';
+import type { GroupState, Role } from '../lfg/types';
 
 /**
  * Button presses. Every branch either updates the run message in place
  * (`UPDATE_MESSAGE`) or answers privately with why nothing changed.
+ *
+ * Crafting owns the `mplus:craft:` sub-namespace and is dispatched first, so an
+ * LFG button and a crafting button can never be read as each other.
  */
 
 export async function handleComponent(
@@ -19,6 +24,10 @@ export async function handleComponent(
 	env: Bindings,
 	ctx: ExecutionContext,
 ): Promise<APIInteractionResponse> {
+	if (isCraftComponentId(interaction.data.custom_id)) {
+		return handleCraftComponent(interaction, env, ctx);
+	}
+
 	const action = parseComponentId(interaction.data.custom_id);
 	if (!action) return ephemeral('That button is no longer supported.');
 

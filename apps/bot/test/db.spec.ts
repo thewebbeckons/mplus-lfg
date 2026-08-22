@@ -1,15 +1,14 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { getGuildConfig, setGuildConfig } from '../src/guildConfig';
 import {
 	cancelGroup,
 	expireStaleGroups,
-	getGuildConfig,
 	joinGroup,
 	leaveGroup,
 	loadState,
 	purgeGroupsPastRetention,
-	setGuildConfig,
-} from '../src/db';
+} from '../src/lfg/db';
 import { applySchema, seedGroup, user } from './helpers';
 
 const NOW = 1_800_000_000;
@@ -23,23 +22,54 @@ function rosterOf(signups: Array<{ user_id: string; role: string }>): Record<str
 }
 
 describe('guild configuration', () => {
-	it('stores one channel and timezone per guild and replaces them on update', async () => {
+	it('stores one row per guild and replaces it on update', async () => {
 		expect(await getGuildConfig(env.DB, 'guild')).toBeNull();
 
-		await setGuildConfig(env.DB, 'guild', 'channel-1', 'America/Chicago');
-		await setGuildConfig(env.DB, 'guild', 'channel-2', 'Europe/Paris');
+		await setGuildConfig(env.DB, { guildId: 'guild', channelId: 'channel-1', timezone: 'America/Chicago' });
+		await setGuildConfig(env.DB, { guildId: 'guild', channelId: 'channel-2', timezone: 'Europe/Paris' });
 
 		expect(await getGuildConfig(env.DB, 'guild')).toEqual({
 			guild_id: 'guild',
 			channel_id: 'channel-2',
 			timezone: 'Europe/Paris',
+			craft_channel_id: null,
+			crafter_role_id: null,
 		});
 		expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM mplus_guild_config').first<{ n: number }>()).toEqual({ n: 1 });
 	});
 
 	it('defaults the timezone to UTC for a row that predates the column', async () => {
 		await env.DB.prepare("INSERT INTO mplus_guild_config (guild_id, channel_id) VALUES ('old', 'channel')").run();
-		expect(await getGuildConfig(env.DB, 'old')).toEqual({ guild_id: 'old', channel_id: 'channel', timezone: 'UTC' });
+		expect(await getGuildConfig(env.DB, 'old')).toEqual({
+			guild_id: 'old',
+			channel_id: 'channel',
+			timezone: 'UTC',
+			craft_channel_id: null,
+			crafter_role_id: null,
+		});
+	});
+
+	it('reads an LFG-only guild back with crafting simply turned off', async () => {
+		await setGuildConfig(env.DB, { guildId: 'lfg-only', channelId: 'channel', timezone: 'UTC' });
+		const config = await getGuildConfig(env.DB, 'lfg-only');
+		expect(config).toMatchObject({ craft_channel_id: null, crafter_role_id: null });
+	});
+
+	it('stores and clears the crafting channel and crafter role', async () => {
+		await setGuildConfig(env.DB, {
+			guildId: 'guild',
+			channelId: 'channel',
+			timezone: 'UTC',
+			craftChannelId: 'craft-channel',
+			crafterRoleId: 'crafter-role',
+		});
+		expect(await getGuildConfig(env.DB, 'guild')).toMatchObject({
+			craft_channel_id: 'craft-channel',
+			crafter_role_id: 'crafter-role',
+		});
+
+		await setGuildConfig(env.DB, { guildId: 'guild', channelId: 'channel', timezone: 'UTC' });
+		expect(await getGuildConfig(env.DB, 'guild')).toMatchObject({ craft_channel_id: null, crafter_role_id: null });
 	});
 });
 
@@ -347,7 +377,7 @@ describe('purgeGroupsPastRetention', () => {
 	});
 
 	it('leaves guild configuration alone', async () => {
-		await setGuildConfig(env.DB, 'guild', 'channel', 'America/Chicago');
+		await setGuildConfig(env.DB, { guildId: 'guild', channelId: 'channel', timezone: 'America/Chicago' });
 		await seedGroup(env.DB, { startTs: NOW - RETENTION - 60, createdAt: NOW - RETENTION - 3600 });
 
 		await purgeGroupsPastRetention(env.DB, NOW, RETENTION, 500);

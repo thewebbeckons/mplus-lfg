@@ -34,7 +34,7 @@ function reset() {
       </div>
       <div>
         <div class="flex items-center gap-2">
-          <span class="font-semibold text-white text-sm sm:text-base">mplus-lfg</span>
+          <span class="font-semibold text-white text-sm sm:text-base">{{ BRAND.name }}</span>
           <span class="bg-[#5865F2] text-white text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">APP</span>
           <span class="text-xs text-[#949ba4]">Today at 8:05 PM</span>
         </div>

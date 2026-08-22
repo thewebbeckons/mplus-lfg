@@ -1,4 +1,4 @@
--- Mythic+ LFG bot schema (Cloudflare D1 / SQLite)
+-- Guild Helper bot schema (Cloudflare D1 / SQLite)
 --
 -- Apply with:
 --   pnpm exec wrangler d1 execute mplus-lfg --local --file=./schema.sql
@@ -7,13 +7,20 @@
 -- D1 enforces foreign keys by default, so no `PRAGMA foreign_keys` is needed
 -- (and PRAGMA statements are rejected over the D1 API).
 
--- The configured channel is the server-side source of truth for every LFG
+-- The configured channels are the server-side source of truth for every
 -- command, interaction, and generated post.
+--
+-- `channel_id` is the LFG channel and predates the crafting feature, which is
+-- why it is not named for its feature the way the newer columns are.
 CREATE TABLE IF NOT EXISTS mplus_guild_config (
 	guild_id TEXT PRIMARY KEY,
 	channel_id TEXT NOT NULL,
 	-- IANA zone name. Bare start times typed into /lfg ("8pm") are read in it.
-	timezone TEXT NOT NULL DEFAULT 'UTC'
+	timezone TEXT NOT NULL DEFAULT 'UTC',
+	-- Crafting channel. NULL means crafting has not been set up in this server.
+	craft_channel_id TEXT,
+	-- Role allowed to claim crafting requests. NULL means anyone may claim.
+	crafter_role_id TEXT
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS mplus_groups (
@@ -66,3 +73,48 @@ CREATE TABLE IF NOT EXISTS mplus_signups (
 
 -- Capacity checks count signups per (group, role) on every button press.
 CREATE INDEX IF NOT EXISTS idx_mplus_signups_group_role ON mplus_signups (group_id, role);
+
+CREATE TABLE IF NOT EXISTS craft_requests (
+	id TEXT PRIMARY KEY,
+	guild_id TEXT NOT NULL,
+	-- The crafting channel as it was when the request was posted, so the message
+	-- can still be edited after an admin moves the feature elsewhere.
+	channel_id TEXT NOT NULL,
+	-- Captured after the public post is created; NULL if that post failed.
+	message_id TEXT,
+	requester_id TEXT NOT NULL,
+	requester_name TEXT NOT NULL,
+	-- Numeric Wowhead/Blizzard item id, extracted from the submitted link.
+	item_id INTEGER NOT NULL,
+	-- The submitted link, kept verbatim including any bonus/modifier parameters,
+	-- because that exact URL is what the "View on Wowhead" button points at.
+	item_url TEXT NOT NULL,
+	-- Resolved through the Blizzard Game Data API where credentials are
+	-- configured, otherwise derived from the URL. NULL is tolerated throughout.
+	item_name TEXT,
+	item_icon TEXT,
+	item_quality TEXT,
+	quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 1),
+	character_realm TEXT,
+	details TEXT,
+	status TEXT NOT NULL DEFAULT 'OPEN'
+		CHECK (status IN ('OPEN', 'CLAIMED', 'COMPLETED', 'CANCELLED', 'EXPIRED')),
+	crafter_id TEXT,
+	crafter_name TEXT,
+	created_at INTEGER NOT NULL,
+	claimed_at INTEGER,
+	completed_at INTEGER,
+	-- When the completion notice was claimed, and how it went. Together these are
+	-- what stop a repeated "Mark complete" click sending a second DM.
+	notified_at INTEGER,
+	notify_status TEXT CHECK (notify_status IN ('PENDING', 'DM_SENT', 'DM_FAILED', 'FALLBACK_POSTED'))
+) STRICT;
+
+-- Drives the expiry sweep: scan only unfinished requests, oldest first.
+CREATE INDEX IF NOT EXISTS idx_craft_requests_live ON craft_requests (status, created_at);
+
+-- Drives the retention purge, which is keyed to age alone.
+CREATE INDEX IF NOT EXISTS idx_craft_requests_created ON craft_requests (created_at);
+
+-- Per-server listings and moderation queries.
+CREATE INDEX IF NOT EXISTS idx_craft_requests_guild ON craft_requests (guild_id, status, created_at);

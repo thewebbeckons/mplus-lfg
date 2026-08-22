@@ -1,16 +1,9 @@
-import type { APIInteraction, APIInteractionResponse } from 'discord-api-types/v10';
-import { getGuildConfig } from './db';
-import { ephemeral } from './interactions';
+import type { APIInteraction } from 'discord-api-types/v10';
+import { type Access, channelIdOf, type InteractionLocation } from '../access';
+import { getGuildConfig } from '../guildConfig';
+import { ephemeral } from '../interactions';
 
-interface InteractionLocation {
-	guild_id?: string;
-	channel?: { id: string } | null;
-	channel_id?: string;
-}
-
-export type LfgAccess =
-	| { allowed: true; guildId: string; channelId: string; timezone: string }
-	| { allowed: false; response: APIInteractionResponse };
+export type LfgAccess = Access<{ guildId: string; channelId: string; timezone: string }>;
 
 /**
  * Reads D1 for every LFG entry point so settings changes take effect
@@ -32,8 +25,7 @@ export async function requireLfgChannel(interaction: APIInteraction & Interactio
 		};
 	}
 
-	const currentChannelId = interaction.channel?.id ?? interaction.channel_id;
-	if (currentChannelId !== config.channel_id) {
+	if (channelIdOf(interaction) !== config.channel_id) {
 		return {
 			allowed: false,
 			response: ephemeral(

@@ -1,3 +1,5 @@
+import { BRAND } from './app/utils/branding'
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/ui', 'nitro-cloudflare-dev'],
@@ -25,9 +27,11 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
-      title: 'mplus-lfg — World of Warcraft Mythic+ Grouping Bot for Discord',
+      title: BRAND.title,
       meta: [
-        { name: 'description', content: 'Discord bot for organizing WoW Mythic+ groups. Create runs, fill roles, and keep your roster up to date right inside Discord.' },
+        { name: 'description', content: BRAND.description },
+        { name: 'og:title', content: BRAND.title },
+        { name: 'og:description', content: BRAND.description },
         { name: 'theme-color', content: '#5865F2' }
       ],
       script: [
