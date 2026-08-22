@@ -5,9 +5,15 @@
 DISCORD_PUBLIC_KEY=""
 # General Information -> Application ID
 DISCORD_APPLICATION_ID=""
-# Bot -> Token (only used by the cron sweep to edit expired run messages)
+# Bot -> Token (used by the cron sweep, follow-up posts, and completion DMs)
 DISCORD_TOKEN=""
 
-# Optional: register the slash command to a single guild for instant availability.
+# Optional: register the slash commands to a single guild for instant availability.
 # Global registration can take up to an hour to propagate.
 DISCORD_GUILD_ID=""
+
+# Optional: Battle.net API credentials, from https://develop.battle.net/access/clients
+# Used only to resolve an item's name, quality, and icon for /craft. Without them
+# the crafting feature still works and falls back to the name in the Wowhead URL.
+BLIZZARD_CLIENT_ID=""
+BLIZZARD_CLIENT_SECRET=""

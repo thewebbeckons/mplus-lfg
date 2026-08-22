@@ -1,19 +1,23 @@
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from 'cloudflare:test';
-import { ChannelType, InteractionResponseType, MessageFlags, PermissionFlagsBits } from 'discord-api-types/v10';
+import { InteractionContextType, InteractionResponseType, MessageFlags, PermissionFlagsBits } from 'discord-api-types/v10';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { joinId } from '../src/customId';
+import { joinId } from '../src/lfg/customId';
 import { COMMANDS } from '../src/commands';
-import { getGuildConfig, loadState, setGuildConfig } from '../src/db';
+import { getGuildConfig, setGuildConfig } from '../src/guildConfig';
+import { loadState } from '../src/lfg/db';
 import worker, { purgeOldRuns, sweepExpiredGroups } from '../src/index';
-import type { GroupRow } from '../src/types';
+import type { GroupRow } from '../src/lfg/types';
 import {
 	CHANNEL_ID,
+	CRAFTER_ROLE_ID,
+	CRAFT_CHANNEL_ID,
 	GUILD_ID,
 	IncomingRequest,
 	OTHER_CHANNEL_ID,
 	applySchema,
 	buttonInteraction,
 	commandInteraction,
+	configureCraftingGuild,
 	configureGuild,
 	createSigningKey,
 	modalInteraction,
@@ -84,11 +88,28 @@ describe('request handling', () => {
 
 describe('command registration', () => {
 	it('registers setup and settings as Manage Server commands', () => {
-		expect(COMMANDS.map((command) => command.name)).toEqual(['lfg', 'setup', 'settings']);
+		expect(COMMANDS.map((command) => command.name)).toEqual(['lfg', 'craft', 'setup', 'settings']);
 		for (const name of ['setup', 'settings']) {
 			expect(COMMANDS.find((command) => command.name === name)?.default_member_permissions).toBe(
 				PermissionFlagsBits.ManageGuild.toString(),
 			);
+		}
+	});
+
+	it('leaves /lfg and /craft usable by everyone, in guilds only', () => {
+		for (const name of ['lfg', 'craft']) {
+			const command = COMMANDS.find((entry) => entry.name === name);
+			expect(command?.default_member_permissions).toBeUndefined();
+			expect(command?.contexts).toEqual([InteractionContextType.Guild]);
+		}
+	});
+
+	it("keeps every description inside Discord's 100 character limit", () => {
+		for (const command of COMMANDS) {
+			// Only chat input commands carry a description; all of ours are.
+			const description = 'description' in command ? command.description : '';
+			expect(description.length).toBeGreaterThan(0);
+			expect(description.length).toBeLessThanOrEqual(100);
 		}
 	});
 });
@@ -122,7 +143,7 @@ describe('/lfg', () => {
 	});
 
 	it('tells the creator which timezone a bare start time will be read in', async () => {
-		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+		await configureGuild(env.DB, { timezone: 'America/Chicago' });
 
 		const { body } = await post(commandInteraction('creator'));
 
@@ -143,7 +164,7 @@ describe('/lfg', () => {
 	});
 
 	it('redirects commands used outside the configured channel', async () => {
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+		await setGuildConfig(env.DB, { guildId: GUILD_ID, channelId: OTHER_CHANNEL_ID, timezone: TIMEZONE });
 
 		const { body } = await post(commandInteraction('creator'));
 
@@ -161,7 +182,7 @@ describe('/setup and /settings', () => {
 		const { body } = await post(commandInteraction('admin', { name: 'setup', permissions: 'manageGuild' }));
 
 		expect(body.type).toBe(InteractionResponseType.Modal);
-		expect(body.data).toMatchObject({ custom_id: 'mplus:setup', title: 'Set up LFG' });
+		expect(body.data).toMatchObject({ custom_id: 'mplus:setup', title: 'Set up Guild Helper' });
 		expect(body.data.components[0]).toMatchObject({
 			type: 18,
 			component: {
@@ -174,28 +195,52 @@ describe('/setup and /settings', () => {
 			},
 		});
 		expect(body.data.components[0].component.default_values).toBeUndefined();
-		expect(body.data.components[1]).toMatchObject({
+		expect(body.data.components[2]).toMatchObject({
 			type: 18,
 			component: { type: 3, custom_id: 'lfg_timezone', required: true, min_values: 1, max_values: 1 },
 		});
 		// A select menu holds at most 25 options.
-		expect(body.data.components[1].component.options.length).toBeLessThanOrEqual(25);
-		expect(body.data.components[1].component.options.some((option: { default?: boolean }) => option.default)).toBe(false);
+		expect(body.data.components[2].component.options.length).toBeLessThanOrEqual(25);
+		expect(body.data.components[2].component.options.some((option: { default?: boolean }) => option.default)).toBe(false);
+	});
+
+	it('offers optional crafting channel and crafter role pickers', async () => {
+		const { body } = await post(commandInteraction('admin', { name: 'setup', permissions: 'manageGuild' }));
+
+		// A modal holds at most 5 top-level components.
+		expect(body.data.components).toHaveLength(4);
+		expect(body.data.components[1]).toMatchObject({
+			type: 18,
+			component: { type: 8, custom_id: 'craft_channel', channel_types: [0], required: false, min_values: 0 },
+		});
+		expect(body.data.components[3]).toMatchObject({
+			type: 18,
+			component: { type: 6, custom_id: 'crafter_role', required: false, min_values: 0 },
+		});
+	});
+
+	it('preselects a configured crafting channel and crafter role', async () => {
+		await configureCraftingGuild(env.DB, { crafterRoleId: CRAFTER_ROLE_ID });
+
+		const { body } = await post(commandInteraction('admin', { name: 'settings', permissions: 'manageGuild' }));
+
+		expect(body.data.components[1].component.default_values).toEqual([{ id: CRAFT_CHANNEL_ID, type: 'channel' }]);
+		expect(body.data.components[3].component.default_values).toEqual([{ id: CRAFTER_ROLE_ID, type: 'role' }]);
 	});
 
 	it('preselects the current channel when settings are reopened', async () => {
 		const { body } = await post(commandInteraction('admin', { name: 'settings', permissions: 'moderator' }));
 
 		expect(body.type).toBe(InteractionResponseType.Modal);
-		expect(body.data.title).toBe('LFG settings');
+		expect(body.data.title).toBe('Server settings');
 		expect(body.data.components[0].component.default_values).toEqual([{ id: CHANNEL_ID, type: 'channel' }]);
-		expect(body.data.components[1].component.options).toContainEqual({
+		expect(body.data.components[2].component.options).toContainEqual({
 			label: expect.stringContaining('Toronto'),
 			value: TIMEZONE,
 			default: true,
 		});
 		// Optional on a reopen, so leaving the shown default untouched keeps it.
-		expect(body.data.components[1].component).toMatchObject({ required: false, min_values: 0 });
+		expect(body.data.components[2].component).toMatchObject({ required: false, min_values: 0 });
 	});
 
 	it('rejects users without Manage Server or Administrator', async () => {
@@ -206,22 +251,24 @@ describe('/setup and /settings', () => {
 	});
 
 	it('saves the selected channel and timezone, and confirms privately', async () => {
-		const { body } = await post(setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild'));
+		const { body } = await post(setupModalInteraction('admin', OTHER_CHANNEL_ID, { permissions: 'manageGuild' }));
 
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
-		expect(body.data.content).toBe(
-			`Setup complete! LFG posts will use <#${OTHER_CHANNEL_ID}>, and start times will be read as **America/Chicago**.`,
+		expect(body.data.content).toContain(
+			`LFG posts will use <#${OTHER_CHANNEL_ID}>, and start times will be read as **America/Chicago**.`,
 		);
 		expect(await getGuildConfig(env.DB, GUILD_ID)).toEqual({
 			guild_id: GUILD_ID,
 			channel_id: OTHER_CHANNEL_ID,
 			timezone: 'America/Chicago',
+			craft_channel_id: null,
+			crafter_role_id: null,
 		});
 	});
 
 	it('keeps the saved timezone when only the channel is changed', async () => {
 		const { body } = await post(
-			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, { permissions: 'manageGuild', timezone: null }),
 		);
 
 		expect(body.data.content).toContain(`**${TIMEZONE}**`);
@@ -235,7 +282,7 @@ describe('/setup and /settings', () => {
 		await env.DB.prepare('DELETE FROM mplus_guild_config WHERE guild_id = ?1').bind(GUILD_ID).run();
 
 		const { body } = await post(
-			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, { permissions: 'manageGuild', timezone: null }),
 		);
 
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
@@ -249,7 +296,7 @@ describe('/setup and /settings', () => {
 			.run();
 
 		const { body } = await post(
-			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, null),
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, { permissions: 'manageGuild', timezone: null }),
 		);
 
 		expect(body.data.content).toContain('**Antarctica/Troll**');
@@ -261,7 +308,7 @@ describe('/setup and /settings', () => {
 
 	it('refuses a timezone the modal never offered', async () => {
 		const { body } = await post(
-			setupModalInteraction('admin', OTHER_CHANNEL_ID, 'manageGuild', ChannelType.GuildText, 'Mars/Orgrimmar'),
+			setupModalInteraction('admin', OTHER_CHANNEL_ID, { permissions: 'manageGuild', timezone: 'Mars/Orgrimmar' }),
 		);
 
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
@@ -270,7 +317,7 @@ describe('/setup and /settings', () => {
 	});
 
 	it('rechecks permissions when the setup modal is submitted', async () => {
-		const { body } = await post(setupModalInteraction('member', OTHER_CHANNEL_ID, 'none'));
+		const { body } = await post(setupModalInteraction('member', OTHER_CHANNEL_ID, { permissions: 'none' }));
 
 		expect(body.data.flags).toBe(MessageFlags.Ephemeral);
 		expect((await getGuildConfig(env.DB, GUILD_ID))?.channel_id).toBe(CHANNEL_ID);
@@ -364,7 +411,7 @@ describe('modal submission', () => {
 	});
 
 	it('reads a start time with no zone in the server timezone', async () => {
-		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+		await configureGuild(env.DB, { timezone: 'America/Chicago' });
 		fetchMock.get('https://discord.com').intercept({ method: 'GET', path: ORIGINAL_MESSAGE_PATH }).reply(200, { id: 'message-1' });
 
 		await post(modalInteraction('creator', { ...fields, start_time: '8pm' }));
@@ -379,7 +426,7 @@ describe('modal submission', () => {
 	});
 
 	it('lets a named zone in the start time override the server timezone', async () => {
-		await configureGuild(env.DB, CHANNEL_ID, 'America/Chicago');
+		await configureGuild(env.DB, { timezone: 'America/Chicago' });
 		fetchMock.get('https://discord.com').intercept({ method: 'GET', path: ORIGINAL_MESSAGE_PATH }).reply(200, { id: 'message-1' });
 
 		await post(modalInteraction('creator', { ...fields, start_time: '8pm EST' }));
@@ -400,7 +447,7 @@ describe('modal submission', () => {
 	});
 
 	it('does not post when settings changed after the modal was opened', async () => {
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+		await setGuildConfig(env.DB, { guildId: GUILD_ID, channelId: OTHER_CHANNEL_ID, timezone: TIMEZONE });
 
 		const { body } = await post(modalInteraction('creator', fields));
 
@@ -462,7 +509,7 @@ describe('roster buttons', () => {
 
 	it('rejects buttons on old posts after the configured channel changes', async () => {
 		const { group } = await seedGroup(env.DB, { creatorRole: 'TANK' });
-		await setGuildConfig(env.DB, GUILD_ID, OTHER_CHANNEL_ID, TIMEZONE);
+		await setGuildConfig(env.DB, { guildId: GUILD_ID, channelId: OTHER_CHANNEL_ID, timezone: TIMEZONE });
 
 		const { body } = await post(buttonInteraction('healer', joinId('HEALER', group.id)));
 

@@ -1,7 +1,7 @@
 import { ComponentType } from 'discord-api-types/v10';
 import { describe, expect, it } from 'vitest';
-import { buildComponents, buildEmbed, rosterCounts } from '../src/embeds';
-import type { GroupRow, GroupState, Role, SignupRow } from '../src/types';
+import { buildComponents, buildEmbed, rosterCounts } from '../src/lfg/embeds';
+import type { GroupRow, GroupState, Role, SignupRow } from '../src/lfg/types';
 
 function state(overrides: Partial<GroupRow> = {}, roster: Array<[string, Role]> = []): GroupState {
 	const group: GroupRow = {

@@ -21,14 +21,14 @@ const inviteUrl = config.public.discordApplicationId
           <div class="w-8 h-8 rounded-lg bg-[#5865F2] flex items-center justify-center text-white shadow-sm">
             <UIcon name="i-lucide-swords" class="w-4 h-4" />
           </div>
-          <span class="text-(--ui-text-highlighted)">mplus-lfg</span>
+          <span class="text-(--ui-text-highlighted)">{{ BRAND.name }}</span>
         </NuxtLink>
 
         <!-- Navigation Links -->
         <nav class="hidden md:flex items-center gap-6 text-sm text-(--ui-text-muted) font-medium">
-          <NuxtLink to="/#features" class="hover:text-(--ui-text-highlighted) transition-colors">Features</NuxtLink>
+          <NuxtLink :to="`/#${BRAND.features.lfg.anchor}`" class="hover:text-(--ui-text-highlighted) transition-colors">{{ BRAND.features.lfg.label }}</NuxtLink>
+          <NuxtLink :to="`/#${BRAND.features.crafting.anchor}`" class="hover:text-(--ui-text-highlighted) transition-colors">{{ BRAND.features.crafting.label }}</NuxtLink>
           <NuxtLink to="/#how-it-works" class="hover:text-(--ui-text-highlighted) transition-colors">How It Works</NuxtLink>
-          <NuxtLink to="/#syntax" class="hover:text-(--ui-text-highlighted) transition-colors">Group Examples</NuxtLink>
           <NuxtLink :to="GITHUB_URL" external target="_blank" rel="noopener noreferrer" class="hover:text-(--ui-text-highlighted) transition-colors" data-insightflare-event="github_link_click" data-insightflare-event-location="nav">GitHub</NuxtLink>
         </nav>
 
@@ -73,7 +73,7 @@ const inviteUrl = config.public.discordApplicationId
           <div class="w-5 h-5 rounded bg-[#5865F2] flex items-center justify-center text-white text-[10px]">
             <UIcon name="i-lucide-swords" class="w-3 h-3" />
           </div>
-          <span class="font-semibold text-(--ui-text-highlighted)">mplus-lfg</span>
+          <span class="font-semibold text-(--ui-text-highlighted)">{{ BRAND.name }}</span>
           <span>• MIT License</span>
         </div>
 

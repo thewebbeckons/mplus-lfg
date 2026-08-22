@@ -1,4 +1,5 @@
-import { ID_PREFIX, ROLES } from './constants';
+import { ID_PREFIX } from '../constants';
+import { ROLES } from './constants';
 import type { Role } from './types';
 
 /**

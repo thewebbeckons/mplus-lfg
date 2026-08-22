@@ -1,26 +1,34 @@
 import { type APIInteraction, type APIInteractionResponse, InteractionResponseType, InteractionType } from 'discord-api-types/v10';
 import {
-	EXPIRY_GRACE_SECONDS,
-	EXPIRY_SWEEP_LIMIT,
-	MAX_GROUP_AGE_SECONDS,
-	PURGE_AFTER_SECONDS,
-	PURGE_SWEEP_LIMIT,
-} from './constants';
-import { expireStaleGroups, purgeGroupsPastRetention } from './db';
+	CRAFT_EXPIRY_SECONDS,
+	CRAFT_EXPIRY_SWEEP_LIMIT,
+	CRAFT_PURGE_AFTER_SECONDS,
+	CRAFT_PURGE_SWEEP_LIMIT,
+} from './craft/constants';
+import { expireStaleCraftRequests, purgeCraftRequestsPastRetention } from './craft/db';
+import { buildCraftMessage } from './craft/embeds';
 import { editChannelMessage } from './discord';
-import { buildGroupMessage } from './embeds';
 import type { Bindings } from './env';
 import { handleCommand } from './handlers/command';
 import { handleComponent } from './handlers/component';
 import { handleModalSubmit } from './handlers/modal';
 import { ephemeral } from './interactions';
+import {
+	EXPIRY_GRACE_SECONDS,
+	EXPIRY_SWEEP_LIMIT,
+	MAX_GROUP_AGE_SECONDS,
+	PURGE_AFTER_SECONDS,
+	PURGE_SWEEP_LIMIT,
+} from './lfg/constants';
+import { expireStaleGroups, purgeGroupsPastRetention } from './lfg/db';
+import { buildGroupMessage } from './lfg/embeds';
 import { verifyDiscordRequest } from './verify';
 
 /**
- * Serverless Mythic+ LFG bot.
+ * Serverless World of Warcraft guild helper.
  *
  * `fetch`     — Discord HTTP interactions (no gateway, no persistent connection).
- * `scheduled` — cron maintenance: expires stale runs, then deletes old ones.
+ * `scheduled` — cron maintenance: expires stale posts, then deletes old ones.
  */
 
 async function route(interaction: APIInteraction, env: Bindings, ctx: ExecutionContext): Promise<APIInteractionResponse> {
@@ -80,14 +88,28 @@ export default {
 } satisfies ExportedHandler<Bindings>;
 
 /**
- * Expiry runs before the purge, so a run is never deleted before its message
+ * Expiry runs before the purge, so a post is never deleted before its message
  * has been closed out. The two windows are far enough apart that this is a
- * formality — a run is expired half an hour after it starts and deleted a day
- * later — but the order makes the dependency explicit.
+ * formality, but the order makes the dependency explicit.
+ *
+ * Each feature's sweep is independent; one failing must not stop the others.
  */
 async function runMaintenance(env: Bindings): Promise<void> {
-	await sweepExpiredGroups(env);
-	await purgeOldRuns(env);
+	const sweeps: Array<[string, Promise<number>]> = [
+		['LFG expiry', sweepExpiredGroups(env)],
+		['craft expiry', sweepExpiredCraftRequests(env)],
+	];
+	for (const [name, sweep] of sweeps) {
+		await sweep.catch((error) => console.error(`${name} sweep failed`, error));
+	}
+
+	const purges: Array<[string, Promise<number>]> = [
+		['LFG purge', purgeOldRuns(env)],
+		['craft purge', purgeOldCraftRequests(env)],
+	];
+	for (const [name, purge] of purges) {
+		await purge.catch((error) => console.error(`${name} failed`, error));
+	}
 }
 
 /**
@@ -112,6 +134,25 @@ export async function sweepExpiredGroups(env: Bindings): Promise<number> {
 }
 
 /**
+ * Marks crafting requests nobody finished as EXPIRED and rewrites their
+ * messages, which drops the claim/complete buttons so a months-old request
+ * cannot be picked up by someone scrolling back.
+ */
+export async function sweepExpiredCraftRequests(env: Bindings): Promise<number> {
+	const nowSeconds = Math.floor(Date.now() / 1000);
+	const expired = await expireStaleCraftRequests(env.DB, nowSeconds, CRAFT_EXPIRY_SECONDS, CRAFT_EXPIRY_SWEEP_LIMIT);
+	if (expired.length === 0) return 0;
+
+	const edits = expired
+		.filter((request) => request.message_id !== null)
+		.map((request) => editChannelMessage(env, request.channel_id, request.message_id as string, buildCraftMessage(request)));
+
+	await Promise.allSettled(edits);
+	console.log(`Expired ${expired.length} crafting request(s), refreshed ${edits.length} message(s)`);
+	return expired.length;
+}
+
+/**
  * Deletes runs past their retention window along with their rosters. The
  * Discord messages are left alone: the sweep above already rewrote them into a
  * closed state with dead buttons, and anyone who does click one on an unedited
@@ -121,5 +162,13 @@ export async function purgeOldRuns(env: Bindings): Promise<number> {
 	const nowSeconds = Math.floor(Date.now() / 1000);
 	const purged = await purgeGroupsPastRetention(env.DB, nowSeconds, PURGE_AFTER_SECONDS, PURGE_SWEEP_LIMIT);
 	if (purged > 0) console.log(`Purged ${purged} Mythic+ run(s) past the retention window`);
+	return purged;
+}
+
+/** The same retention rule for crafting requests, on a longer window. */
+export async function purgeOldCraftRequests(env: Bindings): Promise<number> {
+	const nowSeconds = Math.floor(Date.now() / 1000);
+	const purged = await purgeCraftRequestsPastRetention(env.DB, nowSeconds, CRAFT_PURGE_AFTER_SECONDS, CRAFT_PURGE_SWEEP_LIMIT);
+	if (purged > 0) console.log(`Purged ${purged} crafting request(s) past the retention window`);
 	return purged;
 }

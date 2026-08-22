@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseComposition, parseRole } from '../src/parse';
-import type { Role } from '../src/types';
+import { parseComposition, parseRole } from '../src/lfg/parse';
+import type { Role } from '../src/lfg/types';
 
 describe('parseRole', () => {
 	it('accepts the shorthand people actually type', () => {

@@ -1,4 +1,5 @@
-import type { GroupRow, GroupState, GroupStatus, GuildConfigRow, PartyPlan, Role, SignupRow } from './types';
+import { placeholders, rowsOf } from '../sql';
+import type { GroupRow, GroupState, GroupStatus, PartyPlan, Role, SignupRow } from './types';
 
 /**
  * D1 access layer.
@@ -15,24 +16,6 @@ import type { GroupRow, GroupState, GroupStatus, GuildConfigRow, PartyPlan, Role
 
 const SELECT_GROUP_SQL = 'SELECT * FROM mplus_groups WHERE id = ?1';
 const SELECT_SIGNUPS_SQL = 'SELECT * FROM mplus_signups WHERE group_id = ?1 ORDER BY signed_at ASC, id ASC';
-
-/** The LFG channel and the timezone its start times are read in. */
-export async function getGuildConfig(db: D1Database, guildId: string): Promise<GuildConfigRow | null> {
-	return db
-		.prepare('SELECT guild_id, channel_id, timezone FROM mplus_guild_config WHERE guild_id = ?1')
-		.bind(guildId)
-		.first<GuildConfigRow>();
-}
-
-export async function setGuildConfig(db: D1Database, guildId: string, channelId: string, timezone: string): Promise<void> {
-	await db
-		.prepare(
-			`INSERT INTO mplus_guild_config (guild_id, channel_id, timezone) VALUES (?1, ?2, ?3)
-			 ON CONFLICT (guild_id) DO UPDATE SET channel_id = excluded.channel_id, timezone = excluded.timezone`,
-		)
-		.bind(guildId, channelId, timezone)
-		.run();
-}
 
 /**
  * Re-derive OPEN vs FULL from the roster. Runs after every roster change and is
@@ -69,10 +52,6 @@ const GUARDED_JOIN_SQL = `
 	ON CONFLICT (group_id, user_id) DO UPDATE SET
 		username = excluded.username,
 		role = excluded.role`;
-
-function rowsOf<T>(result: D1Result | undefined): T[] {
-	return (result?.results ?? []) as unknown as T[];
-}
 
 function stateOf(groupResult: D1Result | undefined, signupResult: D1Result | undefined): GroupState | null {
 	const group = rowsOf<GroupRow>(groupResult)[0];
@@ -272,16 +251,16 @@ export async function expireStaleGroups(
 	if (groups.length === 0) return [];
 
 	const ids = groups.map((group) => group.id);
-	const placeholders = ids.map((_, index) => `?${index + 1}`).join(', ');
+	const list = placeholders(ids.length);
 	const results = await db.batch([
 		db
 			.prepare(
 				`UPDATE mplus_groups SET status = 'EXPIRED'
-				 WHERE id IN (${placeholders}) AND status IN ('OPEN', 'FULL')
+				 WHERE id IN (${list}) AND status IN ('OPEN', 'FULL')
 				 RETURNING *`,
 			)
 			.bind(...ids),
-		db.prepare(`SELECT * FROM mplus_signups WHERE group_id IN (${placeholders}) ORDER BY signed_at ASC, id ASC`).bind(...ids),
+		db.prepare(`SELECT * FROM mplus_signups WHERE group_id IN (${list}) ORDER BY signed_at ASC, id ASC`).bind(...ids),
 	]);
 	// Another request may have cancelled a group after the stale scan but before
 	// this batch. RETURNING includes only rows this sweep actually expired, so a
